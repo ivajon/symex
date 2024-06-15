@@ -5,7 +5,7 @@ use std::collections::{HashMap, VecDeque};
 use general_assembly::{condition::Condition, operand::DataWord};
 use tracing::{debug, trace};
 
-use super::{instruction::Instruction, project::Project};
+use super::{arch::Arch, instruction::Instruction, project::Project};
 use crate::{
     elf_util::{ExpressionType, Variable},
     general_assembly::{
@@ -17,8 +17,8 @@ use crate::{
     smt::{DContext, DExpr, DSolver},
 };
 
-pub enum HookOrInstruction {
-    PcHook(PCHook),
+pub enum HookOrInstruction<'a, A: Arch + Clone + 'static> {
+    PcHook(&'a PCHook<A>),
     Instruction(Instruction),
 }
 
@@ -30,8 +30,8 @@ pub struct ContinueInsideInstruction {
 }
 
 #[derive(Clone, Debug)]
-pub struct GAState {
-    pub project: &'static Project,
+pub struct GAState<A: Arch + Clone + 'static> {
+    pub project: &'static Project<A>,
     pub ctx: &'static DContext,
     pub constraints: DSolver,
     pub marked_symbolic: Vec<Variable>,
@@ -49,16 +49,18 @@ pub struct GAState {
     instruction_counter: usize,
     has_jumped: bool,
     instruction_conditions: VecDeque<Condition>,
+    architecture: A,
 }
 
-impl GAState {
+impl<A: Arch + 'static + Clone> GAState<A> {
     /// Create a new state.
     pub fn new(
         ctx: &'static DContext,
-        project: &'static Project,
+        project: &'static Project<A>,
         constraints: DSolver,
         function: &str,
         end_address: u64,
+        architecture: A,
     ) -> Result<Self> {
         let pc_reg = match project.get_symbol_address(function) {
             Some(a) => a,
@@ -112,6 +114,7 @@ impl GAState {
             continue_in_instruction: None,
             current_instruction: None,
             instruction_conditions: VecDeque::new(),
+            architecture,
         })
     }
 
@@ -192,11 +195,12 @@ impl GAState {
 
     /// Create a state used for testing.
     pub fn create_test_state(
-        project: &'static Project,
+        project: &'static Project<A>,
         ctx: &'static DContext,
         constraints: DSolver,
         start_pc: u64,
         start_stack: u64,
+        architecture: A,
     ) -> Self {
         let pc_reg = start_pc;
         let ptr_size = project.get_ptr_size();
@@ -237,6 +241,7 @@ impl GAState {
             continue_in_instruction: None,
             current_instruction: None,
             instruction_conditions: VecDeque::new(),
+            architecture,
         }
     }
 
@@ -369,7 +374,7 @@ impl GAState {
     }
 
     /// Get the next instruction based on the address in the PC register.
-    pub fn get_next_instruction(&self) -> Result<HookOrInstruction> {
+    pub fn get_next_instruction(&self) -> Result<HookOrInstruction<A>> {
         let pc = self.pc_register & !(0b1); // Not applicable for all architectures TODO: Fix this.;
         match self.project.get_pc_hook(pc) {
             Some(hook) => Ok(HookOrInstruction::PcHook(hook)),
@@ -424,5 +429,9 @@ impl GAState {
             // For non constant addresses always read non_static memory
             None => self.write_word_from_memory_no_static(address, value),
         }
+    }
+
+    pub fn instruction_from_array_ptr(&self, data: &[u8]) -> Result<Instruction> {
+        Ok(self.architecture.translate(data, self)?)
     }
 }

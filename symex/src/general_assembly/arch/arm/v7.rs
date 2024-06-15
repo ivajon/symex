@@ -3,6 +3,7 @@ use std::fmt::Display;
 use decoder::Convert;
 use disarmv7::prelude::{Operation as V7Operation, *};
 use general_assembly::operation::Operation;
+use object::{File, Object};
 use regex::Regex;
 
 use crate::{
@@ -16,6 +17,8 @@ use crate::{
     },
 };
 
+use super::{arm_isa, ArmIsa};
+
 #[rustfmt::skip]
 pub mod decoder;
 pub mod compare;
@@ -24,12 +27,12 @@ pub mod test;
 pub mod timing;
 
 /// Type level denotation for the Armv7-EM ISA.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ArmV7EM {}
 
 impl Arch for ArmV7EM {
     fn add_hooks(&self, cfg: &mut RunConfig) {
-        let symbolic_sized = |state: &mut GAState| {
+        let symbolic_sized = |state: &mut GAState<Self>| {
             let value_ptr = state.get_register("R0".to_owned())?;
             let size = state.get_register("R1".to_owned())?.get_constant().unwrap() * 8;
             let name = "any".to_owned() + &state.marked_symbolic.len().to_string();
@@ -59,7 +62,7 @@ impl Arch for ArmV7EM {
         //
         //
         // Or we can simply take the previous PC + 4.
-        let read_pc: RegisterReadHook = |state| {
+        let read_pc: RegisterReadHook<Self> = |state| {
             let new_pc = state
                 .ctx
                 .from_u64(state.last_pc + 4, state.project.get_word_size())
@@ -67,15 +70,16 @@ impl Arch for ArmV7EM {
             Ok(new_pc)
         };
 
-        let read_sp: RegisterReadHook = |state| {
+        let read_sp: RegisterReadHook<Self> = |state| {
             let two = state.ctx.from_u64((!(0b11u32)) as u64, 32);
             let sp = state.get_register("SP".to_owned()).unwrap();
             let sp = sp.simplify();
             Ok(sp.and(&two))
         };
 
-        let write_pc: RegisterWriteHook = |state, value| state.set_register("PC".to_owned(), value);
-        let write_sp: RegisterWriteHook = |state, value| {
+        let write_pc: RegisterWriteHook<Self> =
+            |state, value| state.set_register("PC".to_owned(), value);
+        let write_sp: RegisterWriteHook<Self> = |state, value| {
             state.set_register(
                 "SP".to_owned(),
                 value.and(&state.ctx.from_u64((!(0b11u32)) as u64, 32)),
@@ -91,7 +95,7 @@ impl Arch for ArmV7EM {
         cfg.register_write_hooks.push(("SP&".to_owned(), write_sp));
 
         // reset allways done
-        let read_reset_done: MemoryReadHook = |state, _addr| {
+        let read_reset_done: MemoryReadHook<Self> = |state, _addr| {
             let value = state.ctx.from_u64(0xffff_ffff, 32);
             Ok(value)
         };
@@ -99,7 +103,7 @@ impl Arch for ArmV7EM {
             .push((MemoryHookAddress::Single(0x4000c008), read_reset_done));
     }
 
-    fn translate(&self, buff: &[u8], state: &GAState) -> Result<Instruction, ArchError> {
+    fn translate(&self, buff: &[u8], state: &GAState<Self>) -> Result<Instruction, ArchError> {
         let mut buff: disarmv7::buffer::PeekableBuffer<u8, _> = buff.iter().cloned().into();
 
         let instr = V7Operation::parse(&mut buff).map_err(|e| ArchError::ParsingError(e.into()))?;
@@ -112,6 +116,22 @@ impl Arch for ArmV7EM {
             max_cycle: timing,
             memory_access: Self::memory_access(&instr.1),
         })
+    }
+
+    fn discover(file: &File) -> Result<Option<Self>, ArchError> {
+        let f = match file {
+            File::Elf32(f) => Ok(f),
+            _ => Err(ArchError::IncorrectFileType),
+        }?;
+        let section = match f.section_by_name(".ARM.attributes") {
+            Some(section) => Ok(section),
+            None => Err(ArchError::MissingSection(".ARM.attributes")),
+        }?;
+        let isa = arm_isa(&section)?;
+        match isa {
+            ArmIsa::ArmV6M => Ok(None),
+            ArmIsa::ArmV7EM => Ok(Some(ArmV7EM {})),
+        }
     }
 }
 

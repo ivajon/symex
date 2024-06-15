@@ -1,8 +1,8 @@
-use std::{collections::HashMap, fmt::Debug, fs};
+use std::{collections::HashMap, fmt::Debug};
 
 use general_assembly::operand::{DataHalfWord, DataWord, RawDataWord};
 use gimli::{DebugAbbrev, DebugInfo, DebugStr};
-use object::{Architecture, Object, ObjectSection, ObjectSymbol};
+use object::{File, Object, ObjectSection, ObjectSymbol};
 use tracing::{debug, trace};
 
 use self::segments::Segments;
@@ -11,20 +11,17 @@ use super::{
     instruction::Instruction,
     state::GAState,
     Endianness,
+    GAError,
     Result as SuperResult,
     RunConfig,
     WordSize,
 };
-use crate::{
-    general_assembly::arch::{arch_from_family, arm::Arm, Arch},
-    memory::MemoryError,
-    smt::DExpr,
-};
+use crate::{general_assembly::arch::Arch, memory::MemoryError, smt::DExpr};
 
 mod dwarf_helper;
 use dwarf_helper::*;
 
-mod segments;
+pub mod segments;
 
 type Result<T> = std::result::Result<T, ProjectError>;
 
@@ -43,24 +40,24 @@ pub enum ProjectError {
     ArchError(#[from] ArchError),
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum PCHook {
+#[derive(Debug)]
+pub enum PCHook<A: Arch + Clone + 'static> {
     Continue,
     EndSuccess,
     EndFailure(&'static str),
-    Intrinsic(fn(state: &mut GAState) -> SuperResult<()>),
+    Intrinsic(fn(state: &mut GAState<A>) -> SuperResult<()>),
     Suppress,
 }
 
-pub type PCHooks = HashMap<u64, PCHook>;
+pub type PCHooks<A: Arch> = HashMap<u64, PCHook<A>>;
 
 /// Hook for a register read.
-pub type RegisterReadHook = fn(state: &mut GAState) -> SuperResult<DExpr>;
-pub type RegisterReadHooks = HashMap<String, RegisterReadHook>;
+pub type RegisterReadHook<A: Arch> = fn(state: &mut GAState<A>) -> SuperResult<DExpr>;
+pub type RegisterReadHooks<A: Arch> = HashMap<String, RegisterReadHook<A>>;
 
 /// Hook for a register write.
-pub type RegisterWriteHook = fn(state: &mut GAState, value: DExpr) -> SuperResult<()>;
-pub type RegisterWriteHooks = HashMap<String, RegisterWriteHook>;
+pub type RegisterWriteHook<A: Arch> = fn(state: &mut GAState<A>, value: DExpr) -> SuperResult<()>;
+pub type RegisterWriteHooks<A: Arch> = HashMap<String, RegisterWriteHook<A>>;
 
 #[derive(Debug, Clone)]
 pub enum MemoryHookAddress {
@@ -69,34 +66,35 @@ pub enum MemoryHookAddress {
 }
 
 /// Hook for a memory write.
-pub type MemoryWriteHook =
-    fn(state: &mut GAState, address: u64, value: DExpr, bits: u32) -> SuperResult<()>;
-pub type SingleMemoryWriteHooks = HashMap<u64, MemoryWriteHook>;
-pub type RangeMemoryWriteHooks = Vec<((u64, u64), MemoryWriteHook)>;
+pub type MemoryWriteHook<A: Arch> =
+    fn(state: &mut GAState<A>, address: u64, value: DExpr, bits: u32) -> SuperResult<()>;
+pub type SingleMemoryWriteHooks<A: Arch> = HashMap<u64, MemoryWriteHook<A>>;
+pub type RangeMemoryWriteHooks<A: Arch> = Vec<((u64, u64), MemoryWriteHook<A>)>;
 
 /// Hook for a memory read.
-pub type MemoryReadHook = fn(state: &mut GAState, address: u64) -> SuperResult<DExpr>;
-pub type SingleMemoryReadHooks = HashMap<u64, MemoryReadHook>;
-pub type RangeMemoryReadHooks = Vec<((u64, u64), MemoryReadHook)>;
+pub type MemoryReadHook<A: Arch> = fn(state: &mut GAState<A>, address: u64) -> SuperResult<DExpr>;
+pub type SingleMemoryReadHooks<A: Arch> = HashMap<u64, MemoryReadHook<A>>;
+pub type RangeMemoryReadHooks<A: Arch> = Vec<((u64, u64), MemoryReadHook<A>)>;
 
 /// Holds all data read from the ELF file.
 // Add all read only memory here later to handle global constants.
-pub struct Project {
+pub struct Project<A: Arch + Clone + 'static> {
     segments: Segments,
     word_size: WordSize,
     endianness: Endianness,
     symtab: HashMap<String, u64>,
-    pc_hooks: PCHooks,
-    reg_read_hooks: RegisterReadHooks,
-    reg_write_hooks: RegisterWriteHooks,
-    single_memory_read_hooks: SingleMemoryReadHooks,
-    range_memory_read_hooks: RangeMemoryReadHooks,
-    single_memory_write_hooks: SingleMemoryWriteHooks,
-    range_memory_write_hooks: RangeMemoryWriteHooks,
-    architecture: Box<dyn Arch>,
+    pc_hooks: PCHooks<A>,
+    reg_read_hooks: RegisterReadHooks<A>,
+    reg_write_hooks: RegisterWriteHooks<A>,
+    single_memory_read_hooks: SingleMemoryReadHooks<A>,
+    range_memory_read_hooks: RangeMemoryReadHooks<A>,
+    single_memory_write_hooks: SingleMemoryWriteHooks<A>,
+    range_memory_write_hooks: RangeMemoryWriteHooks<A>,
 }
 
-fn construct_register_read_hooks(hooks: Vec<(String, RegisterReadHook)>) -> RegisterReadHooks {
+fn construct_register_read_hooks<A: Arch + Clone + 'static>(
+    hooks: Vec<(String, RegisterReadHook<A>)>,
+) -> RegisterReadHooks<A> {
     let mut ret = HashMap::new();
     for (register, hook) in hooks {
         ret.insert(register, hook);
@@ -104,7 +102,9 @@ fn construct_register_read_hooks(hooks: Vec<(String, RegisterReadHook)>) -> Regi
     ret
 }
 
-fn construct_register_write_hooks(hooks: Vec<(String, RegisterWriteHook)>) -> RegisterWriteHooks {
+fn construct_register_write_hooks<A: Arch + Clone + 'static>(
+    hooks: Vec<(String, RegisterWriteHook<A>)>,
+) -> RegisterWriteHooks<A> {
     let mut ret = HashMap::new();
 
     for (register, hook) in hooks {
@@ -114,9 +114,9 @@ fn construct_register_write_hooks(hooks: Vec<(String, RegisterWriteHook)>) -> Re
     ret
 }
 
-fn construct_memory_write(
-    hooks: Vec<(MemoryHookAddress, MemoryWriteHook)>,
-) -> (SingleMemoryWriteHooks, RangeMemoryWriteHooks) {
+fn construct_memory_write<A: Arch + Clone + 'static>(
+    hooks: Vec<(MemoryHookAddress, MemoryWriteHook<A>)>,
+) -> (SingleMemoryWriteHooks<A>, RangeMemoryWriteHooks<A>) {
     let mut single_hooks = HashMap::new();
     let mut range_hooks = vec![];
 
@@ -134,9 +134,9 @@ fn construct_memory_write(
     (single_hooks, range_hooks)
 }
 
-fn construct_memory_read_hooks(
-    hooks: Vec<(MemoryHookAddress, MemoryReadHook)>,
-) -> (SingleMemoryReadHooks, RangeMemoryReadHooks) {
+fn construct_memory_read_hooks<A: Arch + Clone + 'static>(
+    hooks: Vec<(MemoryHookAddress, MemoryReadHook<A>)>,
+) -> (SingleMemoryReadHooks<A>, RangeMemoryReadHooks<A>) {
     let mut single_hooks = HashMap::new();
     let mut range_hooks = vec![];
 
@@ -154,28 +154,26 @@ fn construct_memory_read_hooks(
     (single_hooks, range_hooks)
 }
 
-impl Project {
-    pub fn manual_project<A: Arch + 'static>(
+impl<A: Arch + Clone + 'static> Project<A> {
+    pub fn manual_project(
         program_memory: Vec<u8>,
         start_addr: u64,
         end_addr: u64,
         word_size: WordSize,
         endianness: Endianness,
-        architecture: A,
         symtab: HashMap<String, u64>,
-        pc_hooks: PCHooks,
-        reg_read_hooks: RegisterReadHooks,
-        reg_write_hooks: RegisterWriteHooks,
-        single_memory_read_hooks: SingleMemoryReadHooks,
-        range_memory_read_hooks: RangeMemoryReadHooks,
-        single_memory_write_hooks: SingleMemoryWriteHooks,
-        range_memory_write_hooks: RangeMemoryWriteHooks,
-    ) -> Project {
+        pc_hooks: PCHooks<A>,
+        reg_read_hooks: RegisterReadHooks<A>,
+        reg_write_hooks: RegisterWriteHooks<A>,
+        single_memory_read_hooks: SingleMemoryReadHooks<A>,
+        range_memory_read_hooks: RangeMemoryReadHooks<A>,
+        single_memory_write_hooks: SingleMemoryWriteHooks<A>,
+        range_memory_write_hooks: RangeMemoryWriteHooks<A>,
+    ) -> Project<A> {
         Project {
             segments: Segments::from_single_segment(program_memory, start_addr, end_addr),
             word_size,
             endianness,
-            architecture: Box::new(architecture),
             symtab,
             pc_hooks,
             reg_read_hooks,
@@ -188,7 +186,7 @@ impl Project {
     }
 
     #[cfg(test)]
-    pub fn add_hooks(&mut self) {
+    pub fn add_hooks(&mut self, arch: &A) {
         let mut cfg = RunConfig {
             memory_read_hooks: Vec::new(),
             memory_write_hooks: Vec::new(),
@@ -197,15 +195,15 @@ impl Project {
             register_write_hooks: Vec::new(),
             show_path_results: false,
         };
-        self.architecture.add_hooks(&mut cfg);
+        arch.add_hooks(&mut cfg);
 
-        let reg_read_hooks = construct_register_read_hooks(cfg.register_read_hooks.clone());
-        let reg_write_hooks = construct_register_write_hooks(cfg.register_write_hooks.clone());
+        let reg_read_hooks = construct_register_read_hooks(cfg.register_read_hooks);
+        let reg_write_hooks = construct_register_write_hooks(cfg.register_write_hooks);
 
         let (single_memory_write_hooks, range_memory_write_hooks) =
-            construct_memory_write(cfg.memory_write_hooks.clone());
+            construct_memory_write(cfg.memory_write_hooks);
         let (single_memory_read_hooks, range_memory_read_hooks) =
-            construct_memory_read_hooks(cfg.memory_read_hooks.clone());
+            construct_memory_read_hooks(cfg.memory_read_hooks);
 
         self.reg_read_hooks = reg_read_hooks;
         self.reg_write_hooks = reg_write_hooks;
@@ -215,26 +213,18 @@ impl Project {
         self.range_memory_write_hooks = range_memory_write_hooks;
     }
 
-    pub fn from_path(path: &str, cfg: &mut RunConfig) -> Result<Self> {
-        debug!("Parsing elf file: {}", path);
-        let file = fs::read(path).expect("Unable to open file.");
-        let obj_file = match object::File::parse(&*file) {
-            Ok(x) => x,
-            Err(e) => {
-                debug!("Error: {}", e);
-                return Err(ProjectError::UnableToParseElf(path.to_owned()));
-            }
-        };
-
+    pub fn from_path(
+        path: &str,
+        cfg: &mut RunConfig<A>,
+        obj_file: File,
+        architecture: &A,
+    ) -> Result<Self> {
         let segments = Segments::from_file(&obj_file);
-
         let endianness = if obj_file.is_little_endian() {
             Endianness::Little
         } else {
             Endianness::Big
         };
-
-        let architecture = obj_file.architecture();
 
         // Do not catch 16 or 8 bit architectures but will do for now.
         let word_size = if obj_file.is_64() {
@@ -268,17 +258,9 @@ impl Project {
         let debug_str = obj_file.section_by_name(".debug_str").unwrap();
         let debug_str = DebugStr::new(debug_str.data().unwrap(), gimli_endian);
 
-        let architecture = match architecture {
-            Architecture::Arm => {
-                // Get a generic arm arch using dependecy injection
-                arch_from_family::<Arm>(&obj_file)
-            }
-            _ => todo!(),
-        }
-        .unwrap();
         trace!("Running for Architecture {}", architecture);
         architecture.add_hooks(cfg);
-        let pc_hooks = cfg.pc_hooks.clone();
+        let pc_hooks = cfg.pc_hooks;
 
         let pc_hooks =
             construct_pc_hooks_no_index(pc_hooks, &debug_info, &debug_abbrev, &debug_str);
@@ -297,7 +279,6 @@ impl Project {
             segments,
             word_size,
             endianness,
-            architecture,
             symtab,
             pc_hooks,
             reg_read_hooks,
@@ -309,23 +290,23 @@ impl Project {
         })
     }
 
-    pub fn get_pc_hook(&self, pc: u64) -> Option<PCHook> {
-        self.pc_hooks.get(&pc).copied()
+    pub fn get_pc_hook(&self, pc: u64) -> Option<&PCHook<A>> {
+        self.pc_hooks.get(&pc)
     }
 
-    pub fn add_pc_hook(&mut self, pc: u64, hook: PCHook) {
+    pub fn add_pc_hook(&mut self, pc: u64, hook: PCHook<A>) {
         self.pc_hooks.insert(pc, hook);
     }
 
-    pub fn get_register_read_hook(&self, register: &str) -> Option<RegisterReadHook> {
+    pub fn get_register_read_hook(&self, register: &str) -> Option<RegisterReadHook<A>> {
         self.reg_read_hooks.get(register).copied()
     }
 
-    pub fn get_register_write_hook(&self, register: &str) -> Option<RegisterWriteHook> {
+    pub fn get_register_write_hook(&self, register: &str) -> Option<RegisterWriteHook<A>> {
         self.reg_write_hooks.get(register).copied()
     }
 
-    pub fn get_memory_write_hook(&self, address: u64) -> Option<MemoryWriteHook> {
+    pub fn get_memory_write_hook(&self, address: u64) -> Option<MemoryWriteHook<A>> {
         match self.single_memory_write_hooks.get(&address) {
             Some(hook) => Some(*hook),
             None => {
@@ -339,7 +320,7 @@ impl Project {
         }
     }
 
-    pub fn get_memory_read_hook(&self, address: u64) -> Option<MemoryReadHook> {
+    pub fn get_memory_read_hook(&self, address: u64) -> Option<MemoryReadHook<A>> {
         match self.single_memory_read_hooks.get(&address) {
             Some(hook) => Some(*hook),
             None => {
@@ -382,7 +363,11 @@ impl Project {
     }
 
     /// Get the instruction att a address
-    pub fn get_instruction(&self, address: u64, state: &GAState) -> Result<Instruction> {
+    pub fn get_instruction(
+        &self,
+        address: u64,
+        state: &GAState<A>,
+    ) -> Result<Instruction, GAError> {
         trace!("Reading instruction from address: {:#010X}", address);
         match self.get_raw_word(address)? {
             RawDataWord::Word64(d) => self.instruction_from_array_ptr(&d, state),
@@ -392,8 +377,12 @@ impl Project {
         }
     }
 
-    fn instruction_from_array_ptr(&self, data: &[u8], state: &GAState) -> Result<Instruction> {
-        Ok(self.architecture.translate(data, state)?)
+    fn instruction_from_array_ptr(
+        &self,
+        data: &[u8],
+        state: &GAState<A>,
+    ) -> Result<Instruction, GAError> {
+        state.instruction_from_array_ptr(data)
     }
 
     /// Get a byte of data from program memory.
@@ -509,12 +498,12 @@ impl Project {
     }
 }
 
-impl Debug for Project {
+impl<A: Arch + Clone + 'static> Debug for Project<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Project")
             .field("word_size", &self.word_size)
             .field("endianness", &self.endianness)
-            .field("architecture", &self.architecture)
+            //.field("architecture", &hitecture)
             .finish()
     }
 }

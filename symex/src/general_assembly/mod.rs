@@ -10,6 +10,7 @@ pub mod run_config;
 pub mod state;
 pub mod vm;
 
+use arch::ArchError;
 pub use run_config::*;
 
 pub type Result<T> = std::result::Result<T, GAError>;
@@ -30,6 +31,10 @@ pub enum GAError {
 
     #[error("Solver error.")]
     SolverError(#[from] SolverError),
+
+
+    #[error("Architecture error.")]
+    ArchError(#[from] ArchError)
 }
 
 #[derive(Debug, Clone, Copy)]

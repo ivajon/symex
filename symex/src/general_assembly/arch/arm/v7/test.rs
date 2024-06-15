@@ -141,7 +141,7 @@ macro_rules! initiate {
     };
 }
 
-fn setup_test_vm() -> VM {
+fn setup_test_vm() -> VM<ArmV7EM> {
     // create an empty project
     let mut project = Box::new(Project::manual_project(
         vec![],
@@ -149,7 +149,6 @@ fn setup_test_vm() -> VM {
         0,
         WordSize::Bit32,
         Endianness::Little,
-        ArmV7EM {},
         HashMap::new(),
         HashMap::new(),
         HashMap::new(),

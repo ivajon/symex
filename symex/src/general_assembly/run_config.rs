@@ -8,19 +8,24 @@
 //! carried out. Therefore it is advised that one familiarizes oneself with the
 //! inner workings of Symex executor before writing a hook function.
 
+use std::borrow::BorrowMut;
+
 use regex::Regex;
 
-use super::project::{
-    MemoryHookAddress,
-    MemoryReadHook,
-    MemoryWriteHook,
-    PCHook,
-    RegisterReadHook,
-    RegisterWriteHook,
+use super::{
+    arch::Arch,
+    project::{
+        MemoryHookAddress,
+        MemoryReadHook,
+        MemoryWriteHook,
+        PCHook,
+        RegisterReadHook,
+        RegisterWriteHook,
+    },
 };
 
 /// Configures a symbolic execution run.
-pub struct RunConfig {
+pub struct RunConfig<A: Arch + Clone + 'static> {
     /// Indicate if the result of a completed path should be printed out or not.
     pub show_path_results: bool,
 
@@ -28,15 +33,15 @@ pub struct RunConfig {
     /// address or addresses. This address (or addresses) is determined by
     /// finding all subprogram items in the dwarf data that matches the here
     /// provided regular expression and taking the starting address from these.
-    pub pc_hooks: Vec<(Regex, PCHook)>,
+    pub pc_hooks: Vec<(Regex, PCHook<A>)>,
 
     /// A register read hook will run a function instead of reading from a
     /// specified register. There can only be one hook on a single register.
-    pub register_read_hooks: Vec<(String, RegisterReadHook)>,
+    pub register_read_hooks: Vec<(String, RegisterReadHook<A>)>,
 
     /// A register write hook will run a function instead of writing to a
     /// specified register. There can only be one hook on a single register.
-    pub register_write_hooks: Vec<(String, RegisterWriteHook)>,
+    pub register_write_hooks: Vec<(String, RegisterWriteHook<A>)>,
 
     /// A memory write hook will run a function instead of writing to a single
     /// address or range of addresses. There can only be one hook on a
@@ -46,7 +51,7 @@ pub struct RunConfig {
     /// matching range will be executed. As it is not guaranteed that the
     /// order is preserved it is recommended to ensure that there are no
     /// overlapping ranges.
-    pub memory_write_hooks: Vec<(MemoryHookAddress, MemoryWriteHook)>,
+    pub memory_write_hooks: Vec<(MemoryHookAddress, MemoryWriteHook<A>)>,
 
     /// A memory read hook will run a function instead of read to a single
     /// address or range of addresses. There can only be one hook on a
@@ -56,5 +61,19 @@ pub struct RunConfig {
     /// matching range will be executed. As it is not guaranteed that the
     /// order is preserved it is recommended to ensure that there are no
     /// overlapping ranges.
-    pub memory_read_hooks: Vec<(MemoryHookAddress, MemoryReadHook)>,
+    pub memory_read_hooks: Vec<(MemoryHookAddress, MemoryReadHook<A>)>,
 }
+
+impl<A: Arch + Clone + 'static> Default for RunConfig<A> {
+    fn default() -> Self {
+        Self {
+            show_path_results: true,
+            pc_hooks: vec![],
+            register_read_hooks: vec![],
+            register_write_hooks: vec![],
+            memory_write_hooks: vec![],
+            memory_read_hooks: vec![],
+        }
+    }
+}
+

@@ -6,9 +6,11 @@ pub mod timing;
 use std::fmt::Display;
 
 use armv6_m_instruction_parser::Error;
+use object::{File, Object};
 use regex::Regex;
 use tracing::trace;
 
+use super::{arm_isa, ArmIsa};
 use crate::{
     elf_util::{ExpressionType, Variable},
     general_assembly::{
@@ -22,7 +24,7 @@ use crate::{
 
 /// Type level denotation for the
 /// [Armv6-M](https://developer.arm.com/documentation/ddi0419/latest/) ISA.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ArmV6M {}
 
 impl Arch for ArmV6M {
@@ -78,6 +80,22 @@ impl Arch for ArmV6M {
         let ret = armv6_m_instruction_parser::parse(buff).map_err(map_err)?;
         let to_exec = Self::expand(ret);
         Ok(to_exec)
+    }
+
+    fn discover(file: &File) -> Result<Option<Self>, ArchError> {
+        let f = match file {
+            File::Elf32(f) => Ok(f),
+            _ => Err(ArchError::IncorrectFileType),
+        }?;
+        let section = match f.section_by_name(".ARM.attributes") {
+            Some(section) => Ok(section),
+            None => Err(ArchError::MissingSection(".ARM.attributes")),
+        }?;
+        let isa = arm_isa(&section)?;
+        match isa {
+            ArmIsa::ArmV6M => Ok(Some(ArmV6M {})),
+            ArmIsa::ArmV7EM => Ok(None),
+        }
     }
 }
 

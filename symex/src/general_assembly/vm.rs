@@ -1,6 +1,7 @@
 //! Descrebes the VM for general assembly
 
 use super::{
+    arch::Arch,
     executor::{GAExecutor, PathResult},
     path_selection::DFSPathSelection,
     project::Project,
@@ -12,17 +13,18 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct VM {
-    pub project: &'static Project,
+pub struct VM<A: Arch + Clone + 'static> {
+    pub project: &'static Project<A>,
     pub paths: DFSPathSelection,
 }
 
-impl VM {
+impl<A: Arch + Clone + 'static> VM<A> {
     pub fn new(
-        project: &'static Project,
+        project: &'static Project<A>,
         ctx: &'static DContext,
         fn_name: &str,
         end_pc: u64,
+        architecture: A,
     ) -> Result<Self> {
         let mut vm = Self {
             project,
@@ -30,14 +32,14 @@ impl VM {
         };
 
         let solver = DSolver::new(ctx);
-        let state = GAState::new(ctx, project, solver, fn_name, end_pc)?;
+        let state = GAState::<A>::new(ctx, project, solver, fn_name, end_pc, architecture)?;
 
         vm.paths.save_path(Path::new(state, None));
 
         Ok(vm)
     }
 
-    pub fn new_with_state(project: &'static Project, state: GAState) -> Self {
+    pub fn new_with_state(project: &'static Project<A>, state: GAState<A>) -> Self {
         let mut vm = Self {
             project,
             paths: DFSPathSelection::new(),
@@ -48,7 +50,7 @@ impl VM {
         vm
     }
 
-    pub fn run(&mut self) -> Result<Option<(PathResult, GAState)>> {
+    pub fn run(&mut self) -> Result<Option<(PathResult, GAState<A>)>> {
         if let Some(path) = self.paths.get_path() {
             // try stuff
             let mut executor = GAExecutor::from_state(path.state, self, self.project);
