@@ -32,9 +32,8 @@ pub enum GAError {
     #[error("Solver error.")]
     SolverError(#[from] SolverError),
 
-
     #[error("Architecture error.")]
-    ArchError(#[from] ArchError)
+    ArchError(#[from] ArchError),
 }
 
 #[derive(Debug, Clone, Copy)]

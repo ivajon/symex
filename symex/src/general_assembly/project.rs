@@ -367,10 +367,12 @@ impl<A: Arch + Clone + 'static> Project<A> {
         }
     }
 
-    fn instruction_from_array_ptr(&self, data: &[u8], state: &GAState<A>) -> Result<Instruction<A>> {
-        state
-            .instruction_from_array_ptr(data)
-            .map_err(|el| el.into())
+    fn instruction_from_array_ptr(
+        &self,
+        data: &[u8],
+        state: &GAState<A>,
+    ) -> Result<Instruction<A>> {
+        state.instruction_from_array_ptr(data)
     }
 
     /// Get a byte of data from program memory.

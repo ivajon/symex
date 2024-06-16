@@ -77,7 +77,11 @@ impl Arch for ArmV6M {
             .push((MemoryHookAddress::Single(0x4000c008), read_reset_done));
     }
 
-    fn translate(&self, buff: &[u8], _state: &GAState<Self>) -> Result<Instruction<Self>, ArchError> {
+    fn translate(
+        &self,
+        buff: &[u8],
+        _state: &GAState<Self>,
+    ) -> Result<Instruction<Self>, ArchError> {
         let ret = armv6_m_instruction_parser::parse(buff).map_err(map_err)?;
         let to_exec = Self::expand(ret);
         Ok(to_exec)

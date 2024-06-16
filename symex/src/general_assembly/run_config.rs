@@ -8,7 +8,6 @@
 //! carried out. Therefore it is advised that one familiarizes oneself with the
 //! inner workings of Symex executor before writing a hook function.
 
-
 use regex::Regex;
 
 use super::{
@@ -75,4 +74,3 @@ impl<A: Arch + Clone + 'static> Default for RunConfig<A> {
         }
     }
 }
-

@@ -102,7 +102,11 @@ impl Arch for ArmV7EM {
             .push((MemoryHookAddress::Single(0x4000c008), read_reset_done));
     }
 
-    fn translate(&self, buff: &[u8], state: &GAState<Self>) -> Result<Instruction<Self>, ArchError> {
+    fn translate(
+        &self,
+        buff: &[u8],
+        state: &GAState<Self>,
+    ) -> Result<Instruction<Self>, ArchError> {
         let mut buff: disarmv7::buffer::PeekableBuffer<u8, _> = buff.iter().cloned().into();
 
         let instr = V7Operation::parse(&mut buff).map_err(|e| ArchError::ParsingError(e.into()))?;
