@@ -158,13 +158,14 @@ fn setup_test_vm() -> VM<ArmV7EM> {
         HashMap::new(),
         vec![],
     ));
-    project.add_hooks();
+    let mut arch = ArmV7EM::default();
+    project.add_hooks(&mut arch);
 
     let project = Box::leak(project);
     let context = Box::new(DContext::new());
     let context = Box::leak(context);
     let solver = DSolver::new(context);
-    let state = GAState::create_test_state(project, context, solver, 0, u32::MAX as u64);
+    let state = GAState::create_test_state(project, context, solver, 0, u32::MAX as u64, arch);
     let vm = VM::new_with_state(project, state);
     vm
 }

@@ -17,20 +17,20 @@ use crate::{
     smt::{DContext, DExpr, DSolver},
 };
 
-pub enum HookOrInstruction<'a, A: Arch + Clone + 'static> {
+pub enum HookOrInstruction<'a, A: Arch> {
     PcHook(&'a PCHook<A>),
-    Instruction(Instruction),
+    Instruction(Instruction<A>),
 }
 
 #[derive(Clone, Debug)]
-pub struct ContinueInsideInstruction {
-    pub instruction: Instruction,
+pub struct ContinueInsideInstruction<A: Arch> {
+    pub instruction: Instruction<A>,
     pub index: usize,
     pub local: HashMap<String, DExpr>,
 }
 
 #[derive(Clone, Debug)]
-pub struct GAState<A: Arch + Clone + 'static> {
+pub struct GAState<A: Arch> {
     pub project: &'static Project<A>,
     pub ctx: &'static DContext,
     pub constraints: DSolver,
@@ -39,11 +39,11 @@ pub struct GAState<A: Arch + Clone + 'static> {
     pub count_cycles: bool,
     pub cycle_count: usize,
     pub cycle_laps: Vec<(usize, String)>,
-    pub last_instruction: Option<Instruction>,
+    pub last_instruction: Option<Instruction<A>>,
     pub last_pc: u64,
     pub registers: HashMap<String, DExpr>,
-    pub continue_in_instruction: Option<ContinueInsideInstruction>,
-    pub current_instruction: Option<Instruction>,
+    pub continue_in_instruction: Option<ContinueInsideInstruction<A>>,
+    pub current_instruction: Option<Instruction<A>>,
     pc_register: u64, // this register is special
     flags: HashMap<String, DExpr>,
     instruction_counter: usize,
@@ -143,7 +143,7 @@ impl<A: Arch + 'static + Clone> GAState<A> {
     }
 
     /// Gets the last instruction that was executed.
-    pub fn get_last_instruction(&self) -> Option<Instruction> {
+    pub fn get_last_instruction(&self) -> Option<Instruction<A>> {
         self.last_instruction.clone()
     }
 
@@ -176,7 +176,7 @@ impl<A: Arch + 'static + Clone> GAState<A> {
     }
 
     /// Update the last instruction that was executed.
-    pub fn set_last_instruction(&mut self, instruction: Instruction) {
+    pub fn set_last_instruction(&mut self, instruction: Instruction<A>) {
         self.last_instruction = Some(instruction);
     }
 
@@ -431,7 +431,12 @@ impl<A: Arch + 'static + Clone> GAState<A> {
         }
     }
 
-    pub fn instruction_from_array_ptr(&self, data: &[u8]) -> Result<Instruction> {
-        Ok(self.architecture.translate(data, self)?)
+    pub fn instruction_from_array_ptr(
+        &self,
+        data: &[u8],
+    ) -> crate::general_assembly::project::Result<Instruction<A>> {
+        self.architecture
+            .translate(data, self)
+            .map_err(|el| el.into())
     }
 }

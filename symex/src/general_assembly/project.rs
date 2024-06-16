@@ -11,7 +11,6 @@ use super::{
     instruction::Instruction,
     state::GAState,
     Endianness,
-    GAError,
     Result as SuperResult,
     RunConfig,
     WordSize,
@@ -23,7 +22,7 @@ use dwarf_helper::*;
 
 pub mod segments;
 
-type Result<T> = std::result::Result<T, ProjectError>;
+pub type Result<T> = std::result::Result<T, ProjectError>;
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ProjectError {
@@ -40,8 +39,8 @@ pub enum ProjectError {
     ArchError(#[from] ArchError),
 }
 
-#[derive(Debug)]
-pub enum PCHook<A: Arch + Clone + 'static> {
+#[derive(Debug, Clone, Copy)]
+pub enum PCHook<A: Arch> {
     Continue,
     EndSuccess,
     EndFailure(&'static str),
@@ -49,15 +48,15 @@ pub enum PCHook<A: Arch + Clone + 'static> {
     Suppress,
 }
 
-pub type PCHooks<A: Arch> = HashMap<u64, PCHook<A>>;
+pub type PCHooks<A> = HashMap<u64, PCHook<A>>;
 
 /// Hook for a register read.
-pub type RegisterReadHook<A: Arch> = fn(state: &mut GAState<A>) -> SuperResult<DExpr>;
-pub type RegisterReadHooks<A: Arch> = HashMap<String, RegisterReadHook<A>>;
+pub type RegisterReadHook<A> = fn(state: &mut GAState<A>) -> SuperResult<DExpr>;
+pub type RegisterReadHooks<A> = HashMap<String, RegisterReadHook<A>>;
 
 /// Hook for a register write.
-pub type RegisterWriteHook<A: Arch> = fn(state: &mut GAState<A>, value: DExpr) -> SuperResult<()>;
-pub type RegisterWriteHooks<A: Arch> = HashMap<String, RegisterWriteHook<A>>;
+pub type RegisterWriteHook<A> = fn(state: &mut GAState<A>, value: DExpr) -> SuperResult<()>;
+pub type RegisterWriteHooks<A> = HashMap<String, RegisterWriteHook<A>>;
 
 #[derive(Debug, Clone)]
 pub enum MemoryHookAddress {
@@ -66,15 +65,15 @@ pub enum MemoryHookAddress {
 }
 
 /// Hook for a memory write.
-pub type MemoryWriteHook<A: Arch> =
+pub type MemoryWriteHook<A> =
     fn(state: &mut GAState<A>, address: u64, value: DExpr, bits: u32) -> SuperResult<()>;
-pub type SingleMemoryWriteHooks<A: Arch> = HashMap<u64, MemoryWriteHook<A>>;
-pub type RangeMemoryWriteHooks<A: Arch> = Vec<((u64, u64), MemoryWriteHook<A>)>;
+pub type SingleMemoryWriteHooks<A> = HashMap<u64, MemoryWriteHook<A>>;
+pub type RangeMemoryWriteHooks<A> = Vec<((u64, u64), MemoryWriteHook<A>)>;
 
 /// Hook for a memory read.
-pub type MemoryReadHook<A: Arch> = fn(state: &mut GAState<A>, address: u64) -> SuperResult<DExpr>;
-pub type SingleMemoryReadHooks<A: Arch> = HashMap<u64, MemoryReadHook<A>>;
-pub type RangeMemoryReadHooks<A: Arch> = Vec<((u64, u64), MemoryReadHook<A>)>;
+pub type MemoryReadHook<A> = fn(state: &mut GAState<A>, address: u64) -> SuperResult<DExpr>;
+pub type SingleMemoryReadHooks<A> = HashMap<u64, MemoryReadHook<A>>;
+pub type RangeMemoryReadHooks<A> = Vec<((u64, u64), MemoryReadHook<A>)>;
 
 /// Holds all data read from the ELF file.
 // Add all read only memory here later to handle global constants.
@@ -213,12 +212,7 @@ impl<A: Arch + Clone + 'static> Project<A> {
         self.range_memory_write_hooks = range_memory_write_hooks;
     }
 
-    pub fn from_path(
-        path: &str,
-        cfg: &mut RunConfig<A>,
-        obj_file: File,
-        architecture: &A,
-    ) -> Result<Self> {
+    pub fn from_path(cfg: &mut RunConfig<A>, obj_file: File, architecture: &A) -> Result<Self> {
         let segments = Segments::from_file(&obj_file);
         let endianness = if obj_file.is_little_endian() {
             Endianness::Little
@@ -260,7 +254,7 @@ impl<A: Arch + Clone + 'static> Project<A> {
 
         trace!("Running for Architecture {}", architecture);
         architecture.add_hooks(cfg);
-        let pc_hooks = cfg.pc_hooks;
+        let pc_hooks = &cfg.pc_hooks;
 
         let pc_hooks =
             construct_pc_hooks_no_index(pc_hooks, &debug_info, &debug_abbrev, &debug_str);
@@ -363,11 +357,7 @@ impl<A: Arch + Clone + 'static> Project<A> {
     }
 
     /// Get the instruction att a address
-    pub fn get_instruction(
-        &self,
-        address: u64,
-        state: &GAState<A>,
-    ) -> Result<Instruction, GAError> {
+    pub fn get_instruction(&self, address: u64, state: &GAState<A>) -> Result<Instruction<A>> {
         trace!("Reading instruction from address: {:#010X}", address);
         match self.get_raw_word(address)? {
             RawDataWord::Word64(d) => self.instruction_from_array_ptr(&d, state),
@@ -377,12 +367,10 @@ impl<A: Arch + Clone + 'static> Project<A> {
         }
     }
 
-    fn instruction_from_array_ptr(
-        &self,
-        data: &[u8],
-        state: &GAState<A>,
-    ) -> Result<Instruction, GAError> {
-        state.instruction_from_array_ptr(data)
+    fn instruction_from_array_ptr(&self, data: &[u8], state: &GAState<A>) -> Result<Instruction<A>> {
+        state
+            .instruction_from_array_ptr(data)
+            .map_err(|el| el.into())
     }
 
     /// Get a byte of data from program memory.

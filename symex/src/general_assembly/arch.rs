@@ -84,20 +84,15 @@ pub enum Architecture {
 ///
 /// Denotes that the implementer can be treated as an architecture in this
 /// crate.
-pub trait Arch: Debug + Display {
+pub trait Arch: Debug + Display + Clone + Copy + Sized + 'static {
     /// Converts a slice of bytes to an [`Instruction`]
-    fn translate(&self, buff: &[u8], state: &GAState<Self>) -> Result<Instruction, ArchError>
-    where
-        Self: Clone + 'static;
+    fn translate(&self, buff: &[u8], state: &GAState<Self>)
+        -> Result<Instruction<Self>, ArchError>;
 
     /// Adds the architecture specific hooks to the [`RunConfig`]
-    fn add_hooks(&self, cfg: &mut RunConfig<Self>)
-    where
-        Self: Clone + 'static;
+    fn add_hooks(&self, cfg: &mut RunConfig<Self>);
 
     /// Returns an instance of self if the file is defined for this
     /// specific architecture.
-    fn discover(file: &File) -> Result<Option<Self>, ArchError>
-    where
-        Self: Sized;
+    fn discover(file: &File) -> Result<Option<Self>, ArchError>;
 }

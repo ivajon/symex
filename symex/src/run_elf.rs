@@ -22,7 +22,7 @@ use crate::{
     smt::DContext,
 };
 
-fn add_architecture_independent_hooks<A: Arch + Clone + 'static>(cfg: &mut RunConfig<A>) {
+fn add_architecture_independent_hooks<A: Arch>(cfg: &mut RunConfig<A>) {
     // intrinsic functions
     let start_cyclecount = |state: &mut GAState<A>| {
         state.cycle_count = 0;
@@ -98,12 +98,12 @@ pub fn run_elf(path: &str, function: &str) -> Result<Vec<VisualPathResult>, GAEr
 
     match architecture {
         Architecture::Arm => {
-            // Get a generic arm arch using dependecy injection
+            // Run the paths with architecture specific data.
             if let Some(v7) = ArmV7EM::discover(&obj_file)? {
                 let mut cfg = RunConfig::<ArmV7EM>::default();
                 add_architecture_independent_hooks(&mut cfg);
                 let project = Box::new(general_assembly::project::Project::<ArmV7EM>::from_path(
-                    path, &mut cfg, obj_file, &v7,
+                    &mut cfg, obj_file, &v7,
                 )?);
                 let project = Box::leak(project);
                 project.add_pc_hook(end_pc, PCHook::EndSuccess);
@@ -115,7 +115,7 @@ pub fn run_elf(path: &str, function: &str) -> Result<Vec<VisualPathResult>, GAEr
                 let mut cfg = RunConfig::<ArmV6M>::default();
                 add_architecture_independent_hooks(&mut cfg);
                 let project = Box::new(general_assembly::project::Project::<ArmV6M>::from_path(
-                    path, &mut cfg, obj_file, &v6,
+                    &mut cfg, obj_file, &v6,
                 )?);
                 let project = Box::leak(project);
                 project.add_pc_hook(end_pc, PCHook::EndSuccess);

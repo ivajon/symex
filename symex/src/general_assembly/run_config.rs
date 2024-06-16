@@ -8,7 +8,6 @@
 //! carried out. Therefore it is advised that one familiarizes oneself with the
 //! inner workings of Symex executor before writing a hook function.
 
-use std::borrow::BorrowMut;
 
 use regex::Regex;
 

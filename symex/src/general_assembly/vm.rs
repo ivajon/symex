@@ -13,9 +13,9 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct VM<A: Arch + Clone + 'static> {
+pub struct VM<A: Arch> {
     pub project: &'static Project<A>,
-    pub paths: DFSPathSelection,
+    pub paths: DFSPathSelection<A>,
 }
 
 impl<A: Arch + Clone + 'static> VM<A> {

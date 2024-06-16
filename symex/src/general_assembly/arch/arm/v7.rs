@@ -6,6 +6,7 @@ use general_assembly::operation::Operation;
 use object::{File, Object};
 use regex::Regex;
 
+use super::{arm_isa, ArmIsa};
 use crate::{
     elf_util::{ExpressionType, Variable},
     general_assembly::{
@@ -17,8 +18,6 @@ use crate::{
     },
 };
 
-use super::{arm_isa, ArmIsa};
-
 #[rustfmt::skip]
 pub mod decoder;
 pub mod compare;
@@ -27,11 +26,11 @@ pub mod test;
 pub mod timing;
 
 /// Type level denotation for the Armv7-EM ISA.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Copy, Default, Clone)]
 pub struct ArmV7EM {}
 
 impl Arch for ArmV7EM {
-    fn add_hooks(&self, cfg: &mut RunConfig) {
+    fn add_hooks(&self, cfg: &mut RunConfig<Self>) {
         let symbolic_sized = |state: &mut GAState<Self>| {
             let value_ptr = state.get_register("R0".to_owned())?;
             let size = state.get_register("R1".to_owned())?.get_constant().unwrap() * 8;
@@ -103,7 +102,7 @@ impl Arch for ArmV7EM {
             .push((MemoryHookAddress::Single(0x4000c008), read_reset_done));
     }
 
-    fn translate(&self, buff: &[u8], state: &GAState<Self>) -> Result<Instruction, ArchError> {
+    fn translate(&self, buff: &[u8], state: &GAState<Self>) -> Result<Instruction<Self>, ArchError> {
         let mut buff: disarmv7::buffer::PeekableBuffer<u8, _> = buff.iter().cloned().into();
 
         let instr = V7Operation::parse(&mut buff).map_err(|e| ArchError::ParsingError(e.into()))?;

@@ -43,7 +43,7 @@ struct AddWithCarryResult {
     result: DExpr,
 }
 
-impl<'vm, A: Arch + Clone + 'static> GAExecutor<'vm, A> {
+impl<'vm, A: Arch> GAExecutor<'vm, A> {
     /// Construct a executor from a state.
     pub fn from_state(state: GAState<A>, vm: &'vm mut VM<A>, project: &'static Project<A>) -> Self {
         Self {
@@ -81,8 +81,7 @@ impl<'vm, A: Arch + Clone + 'static> GAExecutor<'vm, A> {
                     }
                     crate::general_assembly::project::PCHook::EndFailure(reason) => {
                         debug!("Symbolic execution ended unsuccessfully");
-                        let data = (*reason).clone();
-                        drop(reason);
+                        let data = *reason;
                         self.state.increment_cycle_count();
                         return Ok(PathResult::Failure(data));
                     }
@@ -328,7 +327,7 @@ impl<'vm, A: Arch + Clone + 'static> GAExecutor<'vm, A> {
 
     fn continue_executing_instruction(
         &mut self,
-        inst_to_continue: &ContinueInsideInstruction,
+        inst_to_continue: &ContinueInsideInstruction<A>,
     ) -> Result<()> {
         let mut local = inst_to_continue.local.to_owned();
         self.state.current_instruction = Some(inst_to_continue.instruction.to_owned());
@@ -341,7 +340,7 @@ impl<'vm, A: Arch + Clone + 'static> GAExecutor<'vm, A> {
     }
 
     /// Execute a single instruction.
-    pub(crate) fn execute_instruction(&mut self, i: &Instruction) -> Result<()> {
+    pub(crate) fn execute_instruction(&mut self, i: &Instruction<A>) -> Result<()> {
         // update last pc
         let new_pc = self.state.get_register("PC".to_owned())?;
         self.state.last_pc = new_pc.get_constant().unwrap();
