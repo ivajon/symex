@@ -421,10 +421,14 @@ impl Convert for (usize, V7Operation) {
                     consume!((rd,rn,lsb,msb) from bfi);
                     let (rd, rn) = (rd.local_into(), rn.local_into());
                     let diff = msb - lsb;
-                    assert!(msb >= lsb);
+                    assert!(msb >= lsb, "would be unpredictable");
                     pseudo!([
                         // Assume happy case here
-                        let mask = ((diff - 1) << lsb).local_into();
+                        
+                        let mask = (1 << lsb).local_into();
+                        if (diff > 0) {
+                            mask = ((diff - 1) << lsb).local_into();
+                        }
                         mask = ! mask;
                         rd = rd & mask;
                         let intermediate = rn<diff:0> << lsb.local_into();

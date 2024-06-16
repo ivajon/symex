@@ -80,12 +80,23 @@ macro_rules! test {
                 $exec $(register $reg)? $(address $address $width)? $(flag $flag)?
             );
 
+            println!("{} = {}",
+                stringify!(
+                    $($reg)?
+                    $($address)?
+                    $($flag)?
+                    $(!= $eq_rhs)?
+                    $(== $neq_rhs)?
+                    $(!= $eq_rhs_expr)?
+                    $(== $neq_rhs_expr)?
+                ),result);
             assert!(
                 result
                 $(== $eq_rhs)?
                 $(!= $neq_rhs)?
                 $(!= $eq_rhs_expr)?
                 $(== $neq_rhs_expr)?,
+                
                 stringify!(
                     $($reg)?
                     $($address)?
@@ -4869,5 +4880,80 @@ fn test_tb() {
 
     test!(executor {
         register PC == 0x48
+    });
+}
+
+#[test]
+fn test_bfi_2() {
+    let mut vm = setup_test_vm();
+    let project = vm.project;
+
+    let mut executor = GAExecutor::from_state(vm.paths.get_path().unwrap().state, &mut vm, project);
+
+    initiate!(executor {
+        register R1 = 0b110011;
+        register R2 = 0x1;
+        address(0x123,8) = 0x23;
+        address(0x124,8) = 0x22;
+        address(0x125,8) = 0x21;
+        flag N = 0;
+        flag Z = 0;
+        flag V = 0;
+        flag C = 0
+    });
+
+    let instruction: Operation = Bfi::builder()
+        .set_rn(Register::R1)
+        .set_rd(Register::R2)
+        .set_lsb(3)
+        .set_msb(5)
+        .complete()
+        .into();
+
+    let instruction = Instruction {
+        operations: (16, instruction).convert(false),
+        memory_access: false,
+        instruction_size: 16,
+        max_cycle: CycleCount::Value(0),
+    };
+    executor
+        .execute_instruction(&instruction)
+        .expect("Malformed instruction");
+
+    test!(executor {
+        register R2 == 0b011001
+    });
+    initiate!(executor {
+        register R1 = 0b110011;
+        register R2 = 0x1;
+        address(0x123,8) = 0x23;
+        address(0x124,8) = 0x22;
+        address(0x125,8) = 0x21;
+        flag N = 0;
+        flag Z = 0;
+        flag V = 0;
+        flag C = 0
+    });
+
+    let instruction: Operation = Bfi::builder()
+        .set_rn(Register::R1)
+        .set_rd(Register::R2)
+        .set_lsb(5)
+        .set_msb(5)
+        .complete()
+        .into();
+
+    let instruction = Instruction {
+        operations: (16, instruction).convert(false),
+        memory_access: false,
+        instruction_size: 16,
+        max_cycle: CycleCount::Value(0),
+    };
+    executor
+        .execute_instruction(&instruction)
+        .expect("Malformed instruction");
+
+    test!(executor {
+        register R2 == 0b100001
     });
 }
