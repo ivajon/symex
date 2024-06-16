@@ -1,6 +1,8 @@
 use symex::{
-    general_assembly::{project::MemoryHookAddress, state::GAState, Result, RunConfig},
-    run_elf::run_elf,
+    general_assembly::{
+        arch::arm::v6::ArmV6M, project::MemoryHookAddress, state::GAState, Result, RunConfig,
+    },
+    run_elf::{run_elf, run_elf_configured},
     smt::DExpr,
 };
 
@@ -62,30 +64,38 @@ fn main() {
     let function_name = "IO_IRQ_BANK0";
 
     // Hook to run when the interrupt mask is reset (looked).
-    let lock_hook: fn(state: &mut GAState, addr: u64, value: DExpr, bits: u32) -> Result<()> =
-        |state, _addr, value, _bits| {
-            // save the current cycle count to the laps vector.
-            let val = value.get_constant().unwrap().to_string();
-            state.cycle_laps.push((state.cycle_count, val));
-            Ok(())
-        };
+    let lock_hook: fn(
+        state: &mut GAState<ArmV6M>,
+        addr: u64,
+        value: DExpr,
+        bits: u32,
+    ) -> Result<()> = |state, _addr, value, _bits| {
+        // save the current cycle count to the laps vector.
+        let val = value.get_constant().unwrap().to_string();
+        state.cycle_laps.push((state.cycle_count, val));
+        Ok(())
+    };
 
     // Hook to run when the interrupt mask is set (unlocked).
-    let unlock_hook: fn(state: &mut GAState, addr: u64, value: DExpr, bits: u32) -> Result<()> =
-        |state, _addr, value, _bits| {
-            // save the current cycle count to the laps vector.
-            let val = value.get_constant().unwrap().to_string();
-            let current_instruction_cycle_count =
-                match state.current_instruction.as_ref().unwrap().max_cycle {
-                    symex::general_assembly::instruction::CycleCount::Value(v) => v,
-                    symex::general_assembly::instruction::CycleCount::Function(f) => f(state),
-                };
+    let unlock_hook: fn(
+        state: &mut GAState<ArmV6M>,
+        addr: u64,
+        value: DExpr,
+        bits: u32,
+    ) -> Result<()> = |state, _addr, value, _bits| {
+        // save the current cycle count to the laps vector.
+        let val = value.get_constant().unwrap().to_string();
+        let current_instruction_cycle_count =
+            match state.current_instruction.as_ref().unwrap().max_cycle {
+                symex::general_assembly::instruction::CycleCount::Value(v) => v,
+                symex::general_assembly::instruction::CycleCount::Function(f) => f(state),
+            };
 
-            // add the current instruction to the cycle count to compensate for cycles added after instruction completed
-            let cycle_count = state.cycle_count + current_instruction_cycle_count;
-            state.cycle_laps.push((cycle_count, val));
-            Ok(())
-        };
+        // add the current instruction to the cycle count to compensate for cycles added after instruction completed
+        let cycle_count = state.cycle_count + current_instruction_cycle_count;
+        state.cycle_laps.push((cycle_count, val));
+        Ok(())
+    };
 
     // create a run configuration with the hooks associated with the correct addresses.
     let config = RunConfig {
@@ -101,7 +111,7 @@ fn main() {
     };
 
     // run the symbolic execution
-    let results = run_elf(path_to_elf_file, function_name, config).unwrap();
+    let results = run_elf_configured(path_to_elf_file, function_name, ArmV6M {}, config).unwrap();
 
     // Find the longest path and print out the saved cycle counts for lock and unlock.
     let mut max = 0;
