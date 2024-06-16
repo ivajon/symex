@@ -77,7 +77,7 @@ pub type RangeMemoryReadHooks<A> = Vec<((u64, u64), MemoryReadHook<A>)>;
 
 /// Holds all data read from the ELF file.
 // Add all read only memory here later to handle global constants.
-pub struct Project<A: Arch + Clone + 'static> {
+pub struct Project<A: Arch> {
     segments: Segments,
     word_size: WordSize,
     endianness: Endianness,
@@ -91,7 +91,7 @@ pub struct Project<A: Arch + Clone + 'static> {
     range_memory_write_hooks: RangeMemoryWriteHooks<A>,
 }
 
-fn construct_register_read_hooks<A: Arch + Clone + 'static>(
+fn construct_register_read_hooks<A: Arch>(
     hooks: Vec<(String, RegisterReadHook<A>)>,
 ) -> RegisterReadHooks<A> {
     let mut ret = HashMap::new();
@@ -101,7 +101,7 @@ fn construct_register_read_hooks<A: Arch + Clone + 'static>(
     ret
 }
 
-fn construct_register_write_hooks<A: Arch + Clone + 'static>(
+fn construct_register_write_hooks<A: Arch>(
     hooks: Vec<(String, RegisterWriteHook<A>)>,
 ) -> RegisterWriteHooks<A> {
     let mut ret = HashMap::new();
@@ -113,7 +113,7 @@ fn construct_register_write_hooks<A: Arch + Clone + 'static>(
     ret
 }
 
-fn construct_memory_write<A: Arch + Clone + 'static>(
+fn construct_memory_write<A: Arch>(
     hooks: Vec<(MemoryHookAddress, MemoryWriteHook<A>)>,
 ) -> (SingleMemoryWriteHooks<A>, RangeMemoryWriteHooks<A>) {
     let mut single_hooks = HashMap::new();
@@ -133,7 +133,7 @@ fn construct_memory_write<A: Arch + Clone + 'static>(
     (single_hooks, range_hooks)
 }
 
-fn construct_memory_read_hooks<A: Arch + Clone + 'static>(
+fn construct_memory_read_hooks<A: Arch>(
     hooks: Vec<(MemoryHookAddress, MemoryReadHook<A>)>,
 ) -> (SingleMemoryReadHooks<A>, RangeMemoryReadHooks<A>) {
     let mut single_hooks = HashMap::new();
@@ -153,7 +153,7 @@ fn construct_memory_read_hooks<A: Arch + Clone + 'static>(
     (single_hooks, range_hooks)
 }
 
-impl<A: Arch + Clone + 'static> Project<A> {
+impl<A: Arch> Project<A> {
     pub fn manual_project(
         program_memory: Vec<u8>,
         start_addr: u64,
@@ -488,7 +488,7 @@ impl<A: Arch + Clone + 'static> Project<A> {
     }
 }
 
-impl<A: Arch + Clone + 'static> Debug for Project<A> {
+impl<A: Arch> Debug for Project<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Project")
             .field("word_size", &self.word_size)

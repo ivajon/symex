@@ -44,15 +44,15 @@ pub struct GAState<A: Arch> {
     pub registers: HashMap<String, DExpr>,
     pub continue_in_instruction: Option<ContinueInsideInstruction<A>>,
     pub current_instruction: Option<Instruction<A>>,
+    pub architecture: A,
     pc_register: u64, // this register is special
     flags: HashMap<String, DExpr>,
     instruction_counter: usize,
     has_jumped: bool,
     instruction_conditions: VecDeque<Condition>,
-    architecture: A,
 }
 
-impl<A: Arch + 'static + Clone> GAState<A> {
+impl<A: Arch> GAState<A> {
     /// Create a new state.
     pub fn new(
         ctx: &'static DContext,

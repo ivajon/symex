@@ -22,7 +22,7 @@ use crate::{
     smt::{smt_boolector::BoolectorSolverContext, DExpr, SolverError},
 };
 
-pub struct GAExecutor<'vm, A: Arch + Clone + 'static> {
+pub struct GAExecutor<'vm, A: Arch> {
     pub vm: &'vm mut VM<A>,
     pub state: GAState<A>,
     pub project: &'static Project<A>,

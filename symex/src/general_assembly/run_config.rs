@@ -23,7 +23,7 @@ use super::{
 };
 
 /// Configures a symbolic execution run.
-pub struct RunConfig<A: Arch + Clone + 'static> {
+pub struct RunConfig<A: Arch> {
     /// Indicate if the result of a completed path should be printed out or not.
     pub show_path_results: bool,
 
@@ -62,7 +62,7 @@ pub struct RunConfig<A: Arch + Clone + 'static> {
     pub memory_read_hooks: Vec<(MemoryHookAddress, MemoryReadHook<A>)>,
 }
 
-impl<A: Arch + Clone + 'static> Default for RunConfig<A> {
+impl<A: Arch> Default for RunConfig<A> {
     fn default() -> Self {
         Self {
             show_path_results: true,

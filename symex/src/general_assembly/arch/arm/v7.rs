@@ -133,7 +133,7 @@ impl Arch for ArmV7EM {
         let isa = arm_isa(&section)?;
         match isa {
             ArmIsa::ArmV6M => Ok(None),
-            ArmIsa::ArmV7EM => Ok(Some(ArmV7EM {})),
+            ArmIsa::ArmV7EM => Ok(Some(ArmV7EM::default())),
         }
     }
 }

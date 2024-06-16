@@ -18,7 +18,7 @@ pub struct VM<A: Arch> {
     pub paths: DFSPathSelection<A>,
 }
 
-impl<A: Arch + Clone + 'static> VM<A> {
+impl<A: Arch> VM<A> {
     pub fn new(
         project: &'static Project<A>,
         ctx: &'static DContext,
