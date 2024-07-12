@@ -9,49 +9,9 @@
 pub mod v6;
 pub mod v7;
 
-use std::fmt::Display;
+use object::ObjectSection;
 
-use object::{File, Object, ObjectSection};
-use v6::ArmV6M;
-use v7::ArmV7EM;
-
-use super::{Arch, ArchError, Family};
-
-/// Type level abstraction that serves as a constructor
-///
-/// This abstraction only servers as a constructor for the
-/// different ARM instruction sets supported by this crate.
-#[derive(Debug)]
-pub struct Arm {}
-
-impl Family for Arm {
-    /// Tries to determine what ARM ISA the [`File`] is compiled for.
-    ///
-    /// Expects an elf file with corresponding
-    /// .ARM.attributes section which provides the needed information
-    /// about the compilation target.
-    fn try_from(file: &File) -> Result<Box<dyn Arch>, ArchError> {
-        let f = match file {
-            File::Elf32(f) => Ok(f),
-            _ => Err(ArchError::IncorrectFileType),
-        }?;
-        let section = match f.section_by_name(".ARM.attributes") {
-            Some(section) => Ok(section),
-            None => Err(ArchError::MissingSection(".ARM.attributes")),
-        }?;
-        let isa = arm_isa(&section)?;
-        match isa {
-            ArmIsa::ArmV6M => Ok(Box::new(ArmV6M {})),
-            ArmIsa::ArmV7EM => Ok(Box::new(ArmV7EM {})),
-        }
-    }
-}
-
-impl Display for Arm {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Generic ARM architecture")
-    }
-}
+use super::ArchError;
 
 #[non_exhaustive]
 #[allow(dead_code)]

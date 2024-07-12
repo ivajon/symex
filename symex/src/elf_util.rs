@@ -6,7 +6,7 @@ use colored::*;
 use indenter::indented;
 
 use crate::{
-    general_assembly::{state::GAState, GAError},
+    general_assembly::{arch::Arch, state::GAState, GAError},
     smt::DExpr,
 };
 
@@ -44,7 +44,7 @@ pub struct VisualPathResult {
     pub cycle_laps: Vec<(usize, String)>,
 }
 
-fn elf_get_values<'a, I>(vars: I, state: &GAState) -> Result<Vec<Variable>, GAError>
+fn elf_get_values<'a, I>(vars: I, state: &GAState<impl Arch>) -> Result<Vec<Variable>, GAError>
 where
     I: Iterator<Item = &'a Variable>,
 {
@@ -65,7 +65,7 @@ where
 impl VisualPathResult {
     /// Creates a result from a state.
     pub fn from_state(
-        state: GAState,
+        state: GAState<impl Arch>,
         path_num: usize,
         result: PathStatus,
     ) -> Result<Self, GAError> {

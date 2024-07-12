@@ -1,5 +1,4 @@
 //! Simple runner that starts symbolic execution on LLVM bitcode.
-//!
 use std::{
     path::Path,
     time::{Duration, Instant},

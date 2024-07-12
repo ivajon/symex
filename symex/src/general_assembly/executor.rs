@@ -10,6 +10,7 @@ use general_assembly::{
 use tracing::{debug, trace};
 
 use super::{
+    arch::Arch,
     instruction::Instruction,
     project::Project,
     state::{ContinueInsideInstruction, GAState},
@@ -21,10 +22,10 @@ use crate::{
     smt::{smt_boolector::BoolectorSolverContext, DExpr, SolverError},
 };
 
-pub struct GAExecutor<'vm> {
-    pub vm: &'vm mut VM,
-    pub state: GAState,
-    pub project: &'static Project,
+pub struct GAExecutor<'vm, A: Arch> {
+    pub vm: &'vm mut VM<A>,
+    pub state: GAState<A>,
+    pub project: &'static Project<A>,
     //current_instruction: Option<Instruction>,
     current_operation_index: usize,
 }
@@ -42,9 +43,9 @@ struct AddWithCarryResult {
     result: DExpr,
 }
 
-impl<'vm> GAExecutor<'vm> {
+impl<'vm, A: Arch> GAExecutor<'vm, A> {
     /// Construct a executor from a state.
-    pub fn from_state(state: GAState, vm: &'vm mut VM, project: &'static Project) -> Self {
+    pub fn from_state(state: GAState<A>, vm: &'vm mut VM<A>, project: &'static Project<A>) -> Self {
         Self {
             vm,
             state,
@@ -80,8 +81,9 @@ impl<'vm> GAExecutor<'vm> {
                     }
                     crate::general_assembly::project::PCHook::EndFailure(reason) => {
                         debug!("Symbolic execution ended unsuccessfully");
+                        let data = *reason;
                         self.state.increment_cycle_count();
-                        return Ok(PathResult::Failure(reason));
+                        return Ok(PathResult::Failure(data));
                     }
                     crate::general_assembly::project::PCHook::Suppress => {
                         self.state.increment_cycle_count();
@@ -325,7 +327,7 @@ impl<'vm> GAExecutor<'vm> {
 
     fn continue_executing_instruction(
         &mut self,
-        inst_to_continue: &ContinueInsideInstruction,
+        inst_to_continue: &ContinueInsideInstruction<A>,
     ) -> Result<()> {
         let mut local = inst_to_continue.local.to_owned();
         self.state.current_instruction = Some(inst_to_continue.instruction.to_owned());
@@ -338,7 +340,7 @@ impl<'vm> GAExecutor<'vm> {
     }
 
     /// Execute a single instruction.
-    pub(crate) fn execute_instruction(&mut self, i: &Instruction) -> Result<()> {
+    pub(crate) fn execute_instruction(&mut self, i: &Instruction<A>) -> Result<()> {
         // update last pc
         let new_pc = self.state.get_register("PC".to_owned())?;
         self.state.last_pc = new_pc.get_constant().unwrap();
@@ -953,7 +955,11 @@ fn add_with_carry(
 mod test {
     use std::collections::HashMap;
 
-    use general_assembly::{condition::Condition, operand::{DataWord, Operand}, operation::Operation};
+    use general_assembly::{
+        condition::Condition,
+        operand::{DataWord, Operand},
+        operation::Operation,
+    };
 
     use super::{count_leading_ones, count_ones, count_zeroes};
     use crate::{
@@ -1109,7 +1115,7 @@ mod test {
         assert!(!result.overflow.get_constant_bool().unwrap());
     }
 
-    fn setup_test_vm() -> VM {
+    fn setup_test_vm() -> VM<ArmV6M> {
         // create an empty project
         let project = Box::new(Project::manual_project(
             vec![],
@@ -1117,7 +1123,6 @@ mod test {
             0,
             WordSize::Bit32,
             Endianness::Little,
-            ArmV6M {},
             HashMap::new(),
             HashMap::new(),
             HashMap::new(),
@@ -1131,7 +1136,8 @@ mod test {
         let context = Box::new(DContext::new());
         let context = Box::leak(context);
         let solver = DSolver::new(context);
-        let state = GAState::create_test_state(project, context, solver, 0, u32::MAX as u64);
+        let state =
+            GAState::create_test_state(project, context, solver, 0, u32::MAX as u64, ArmV6M {});
         let vm = VM::new_with_state(project, state);
         vm
     }

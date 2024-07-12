@@ -17,6 +17,7 @@ use regex::Regex;
 use tracing::{debug, trace};
 
 use super::{PCHook, PCHooks};
+use crate::general_assembly::arch::Arch;
 
 /// Constructs a list of address hook pairs from a list of symbol name hook
 /// pairs.
@@ -25,19 +26,19 @@ use super::{PCHook, PCHooks};
 /// if it is a function(subprogram) it adds the address and hook to the hooks
 /// list.
 #[allow(dead_code)]
-pub fn construct_pc_hooks<R: Reader>(
-    hooks: Vec<(Regex, PCHook)>,
+pub fn construct_pc_hooks<R: Reader, A: Arch>(
+    hooks: &Vec<(Regex, PCHook<A>)>,
     pub_names: &DebugPubNames<R>,
     debug_info: &DebugInfo<R>,
     debug_abbrev: &DebugAbbrev<R>,
-) -> PCHooks {
+) -> PCHooks<A> {
     trace!("Constructing PC hooks");
-    let mut ret: PCHooks = HashMap::new();
+    let mut ret: PCHooks<A> = HashMap::new();
     let mut name_items = pub_names.items();
     let mut found_hooks = HashSet::new();
     'inner: while let Some(pubname) = name_items.next().unwrap() {
         let item_name = pubname.name().to_string_lossy().unwrap();
-        for (name, hook) in &hooks {
+        for (name, hook) in hooks {
             if name.is_match(item_name.as_ref()) {
                 let unit_offset = pubname.unit_header_offset();
                 let die_offset = pubname.die_offset();
@@ -68,14 +69,14 @@ pub fn construct_pc_hooks<R: Reader>(
     ret
 }
 
-pub fn construct_pc_hooks_no_index<R: Reader>(
-    hooks: Vec<(Regex, PCHook)>,
+pub fn construct_pc_hooks_no_index<R: Reader, A: Arch>(
+    hooks: &Vec<(Regex, PCHook<A>)>,
     debug_info: &DebugInfo<R>,
     debug_abbrev: &DebugAbbrev<R>,
     debug_str: &DebugStr<R>,
-) -> PCHooks {
+) -> PCHooks<A> {
     trace!("Constructing PC hooks");
-    let mut ret: PCHooks = HashMap::new();
+    let mut ret: PCHooks<A> = HashMap::new();
     let mut found_hooks = HashSet::new();
 
     let mut units = debug_info.units();
@@ -101,7 +102,7 @@ pub fn construct_pc_hooks_no_index<R: Reader>(
             let entry_name = debug_str.get_str(entry_name).unwrap();
             let name_str = entry_name.to_string().unwrap();
 
-            for (name, hook) in &hooks {
+            for (name, hook) in hooks {
                 if name.is_match(name_str.as_ref()) {
                     let addr = match entry.attr_value(DW_AT_low_pc).unwrap() {
                         Some(v) => v,
