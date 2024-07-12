@@ -43,11 +43,12 @@ impl Arch for ArmV6M {
                 name: Some(name),
                 value: symb_value.clone(),
                 ty: ExpressionType::Integer(size as usize),
+                alias: None,
             });
             state.memory.write(&value_ptr, symb_value)?;
 
             let lr = state.get_register("LR".to_owned())?;
-            state.set_register("PC".to_owned(), lr)?;
+            state.set_register("PC".to_owned(), lr, None)?;
             Ok(())
         };
 
@@ -63,7 +64,7 @@ impl Arch for ArmV6M {
         };
 
         let write_pc: RegisterWriteHook<Self> =
-            |state, value| state.set_register("PC".to_owned(), value);
+            |state, value| state.set_register("PC".to_owned(), value, None);
 
         cfg.register_read_hooks.push(("PC+".to_owned(), read_pc));
         cfg.register_write_hooks.push(("PC+".to_owned(), write_pc));
@@ -101,6 +102,52 @@ impl Arch for ArmV6M {
             ArmIsa::ArmV6M => Ok(Some(ArmV6M {})),
             ArmIsa::ArmV7EM => Ok(None),
         }
+    }
+
+    fn register_to_number(reg: &String) -> Option<u8> {
+        Some(match reg.as_str() {
+            "R0" => 0,
+            "R1" => 1,
+            "R2" => 2,
+            "R3" => 3,
+            "R4" => 4,
+            "R5" => 5,
+            "R6" => 6,
+            "R7" => 7,
+            "R8" => 8,
+            "R9" => 9,
+            "R10" => 10,
+            "R11" => 11,
+            "R12" => 12,
+            "SP" => 13,
+            "SP&" => 13,
+            "LR" => 14,
+            "PC" => 15,
+            "PC+" => 15,
+            _ => return None,
+        })
+    }
+
+    fn number_to_register(reg: u8) -> Option<String> {
+        Some(match reg {
+            0 => "R0".to_owned(),
+            1 => "R1".to_owned(),
+            2 => "R2".to_owned(),
+            3 => "R3".to_owned(),
+            4 => "R4".to_owned(),
+            5 => "R5".to_owned(),
+            6 => "R6".to_owned(),
+            7 => "R7".to_owned(),
+            8 => "R8".to_owned(),
+            9 => "R9".to_owned(),
+            10 => "R10".to_owned(),
+            11 => "R11".to_owned(),
+            12 => "R12".to_owned(),
+            13 => "SP&".to_owned(),
+            14 => "LR".to_owned(),
+            15 => "PC+".to_owned(),
+            _ => return None,
+        })
     }
 }
 

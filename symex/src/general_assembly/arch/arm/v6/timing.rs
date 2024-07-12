@@ -8,7 +8,7 @@ use crate::general_assembly::{instruction::CycleCount, state::GAState};
 pub(crate) fn cycle_count_m0plus_core(operation: &Operation) -> CycleCount<ArmV6M> {
     // SIO based on the rp2040 make this configurable later
     let address_max_cycle_function: fn(state: &GAState<ArmV6M>) -> usize = |state| {
-        let address = match state.registers.get("LastAddr").unwrap().get_constant() {
+        let address = match state.registers.get("LastAddr").unwrap().0.get_constant() {
             Some(v) => v,
             None => return 2,
         };

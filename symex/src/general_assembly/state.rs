@@ -41,7 +41,7 @@ pub struct GAState<A: Arch> {
     pub cycle_laps: Vec<(usize, String)>,
     pub last_instruction: Option<Instruction<A>>,
     pub last_pc: u64,
-    pub registers: HashMap<String, DExpr>,
+    pub registers: HashMap<String, (DExpr, Option<String>)>,
     pub continue_in_instruction: Option<ContinueInsideInstruction<A>>,
     pub current_instruction: Option<Instruction<A>>,
     pub architecture: A,
@@ -80,14 +80,14 @@ impl<A: Arch> GAState<A> {
         let memory = ArrayMemory::new(ctx, ptr_size, project.get_endianness());
         let mut registers = HashMap::new();
         let pc_expr = ctx.from_u64(pc_reg, ptr_size);
-        registers.insert("PC".to_owned(), pc_expr);
+        registers.insert("PC".to_owned(), (pc_expr, None));
 
         let sp_expr = ctx.from_u64(sp_reg, ptr_size);
-        registers.insert("SP".to_owned(), sp_expr);
+        registers.insert("SP".to_owned(), (sp_expr, None));
 
         // set the link register to max value to detect when returning from a function
         let end_pc_expr = ctx.from_u64(end_address, ptr_size);
-        registers.insert("LR".to_owned(), end_pc_expr);
+        registers.insert("LR".to_owned(), (end_pc_expr, None));
 
         let mut flags = HashMap::new();
         flags.insert("N".to_owned(), ctx.unconstrained(1, "flags.N"));
@@ -211,10 +211,10 @@ impl<A: Arch> GAState<A> {
         let memory = ArrayMemory::new(ctx, ptr_size, project.get_endianness());
         let mut registers = HashMap::new();
         let pc_expr = ctx.from_u64(pc_reg, ptr_size);
-        registers.insert("PC".to_owned(), pc_expr);
+        registers.insert("PC".to_owned(), (pc_expr, None));
 
         let sp_expr = ctx.from_u64(sp_reg, ptr_size);
-        registers.insert("SP".to_owned(), sp_expr);
+        registers.insert("SP".to_owned(), (sp_expr, None));
 
         let mut flags = HashMap::new();
         flags.insert("N".to_owned(), ctx.unconstrained(1, "flags.N"));
@@ -246,7 +246,15 @@ impl<A: Arch> GAState<A> {
     }
 
     /// Set a value to a register.
-    pub fn set_register(&mut self, register: String, expr: DExpr) -> Result<()> {
+    pub fn set_register(
+        &mut self,
+        register: String,
+        expr: DExpr,
+        name: Option<String>,
+    ) -> Result<()> {
+        if let Some(ref name) = name {
+            println!("Register {register} = {name}");
+        }
         // crude solution should prbobly change
         if register == "PC" {
             let value = match expr.get_constant() {
@@ -279,7 +287,15 @@ impl<A: Arch> GAState<A> {
         match self.project.get_register_write_hook(&register) {
             Some(hook) => hook(self, expr),
             None => {
-                self.registers.insert(register, expr);
+                let name = if let Some((_, prev_name)) = self.registers.get(&register) {
+                    match name {
+                        Some(name) => Some(name),
+                        None => prev_name.clone(),
+                    }
+                } else {
+                    name
+                };
+                self.registers.insert(register, (expr, name));
                 Ok(())
             }
         }
@@ -293,7 +309,7 @@ impl<A: Arch> GAState<A> {
             Some(hook) => Ok(hook(self)?),
             // if no hook found read like normal
             None => match self.registers.get(&register) {
-                Some(v) => Ok(v.to_owned()),
+                Some((v, _)) => Ok(v.to_owned()),
                 None => {
                     // If register do not exist yet create it with unconstrained value.
                     let value = self
@@ -303,8 +319,11 @@ impl<A: Arch> GAState<A> {
                         name: Some(register.to_owned()),
                         value: value.clone(),
                         ty: ExpressionType::Integer(self.project.get_word_size() as usize),
+                        alias: None,
                     });
-                    self.registers.insert(register.to_owned(), value.to_owned());
+                    self.registers
+                        .insert(register.to_owned(), (value.to_owned(), None));
+
                     Ok(value)
                 }
             },

@@ -27,7 +27,7 @@ macro_rules! get_operand {
         let local = HashMap::new();
         $exec
             .get_operand_value(&operand, &local)
-            .expect("Could not find a test specified register")
+            .expect("Could not find a test specified register").0
             .get_constant()
             .expect("Could not get test specified register as constant")
     }};
@@ -36,7 +36,7 @@ macro_rules! get_operand {
         let local = HashMap::new();
         $exec
             .get_operand_value(&operand, &local)
-            .expect("Could not find a test specified flag")
+            .expect("Could not find a test specified flag").0
             .get_constant()
             .expect("Could not get test specified flag as constant")
     }};
@@ -48,7 +48,7 @@ macro_rules! get_operand {
         let local = HashMap::new();
         $exec
             .get_operand_value(&operand, &local)
-            .expect("Could not find a test specified flag")
+            .expect("Could not find a test specified flag").0
             .get_constant()
             .expect("Could not get test specified flag as constant")
     }};

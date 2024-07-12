@@ -1,8 +1,9 @@
 use std::{collections::HashMap, fmt::Debug};
 
 use general_assembly::operand::{DataHalfWord, DataWord, RawDataWord};
-use gimli::{DebugAbbrev, DebugInfo, DebugStr};
+use gimli::{DebugAbbrev, DebugInfo, DebugStr, EndianSlice};
 use object::{File, Object, ObjectSection, ObjectSymbol};
+use string_mapping::{NameAccessor, Stack};
 use tracing::{debug, trace};
 
 use self::segments::Segments;
@@ -18,6 +19,7 @@ use super::{
 use crate::{general_assembly::arch::Arch, memory::MemoryError, smt::DExpr};
 
 mod dwarf_helper;
+pub mod string_mapping;
 use dwarf_helper::*;
 
 pub mod segments;
@@ -89,6 +91,7 @@ pub struct Project<A: Arch> {
     range_memory_read_hooks: RangeMemoryReadHooks<A>,
     single_memory_write_hooks: SingleMemoryWriteHooks<A>,
     range_memory_write_hooks: RangeMemoryWriteHooks<A>,
+    name_stack: Option<Box<dyn NameAccessor>>,
 }
 
 fn construct_register_read_hooks<A: Arch>(
@@ -181,6 +184,7 @@ impl<A: Arch> Project<A> {
             range_memory_read_hooks,
             single_memory_write_hooks,
             range_memory_write_hooks,
+            name_stack: None,
         }
     }
 
@@ -212,7 +216,7 @@ impl<A: Arch> Project<A> {
         self.range_memory_write_hooks = range_memory_write_hooks;
     }
 
-    pub fn from_path(cfg: &mut RunConfig<A>, obj_file: File, architecture: &A) -> Result<Self> {
+    pub fn from_path(cfg: &mut RunConfig<A>, obj_file: File<'static>, architecture: &A) -> Result<Self> {
         let segments = Segments::from_file(&obj_file);
         let endianness = if obj_file.is_little_endian() {
             Endianness::Little
@@ -252,6 +256,19 @@ impl<A: Arch> Project<A> {
         let debug_str = obj_file.section_by_name(".debug_str").unwrap();
         let debug_str = DebugStr::new(debug_str.data().unwrap(), gimli_endian);
 
+        let stack: Option<Box<dyn NameAccessor>> = Some(Box::new({
+            //let sup_loader = |section: gimli::SectionId| {
+            // get_sup_file_section_reader(section.name()) };
+            let dwarf = gimli::Dwarf::load(|name| -> std::result::Result<_, gimli::Error> {
+                match obj_file.section_by_name(name.name()) {
+                    Some(val) => Ok(EndianSlice::new(val.data().unwrap_or(&[]), gimli_endian)),
+                    None => Ok(EndianSlice::new(&[], gimli_endian)),
+                }
+            })
+            .unwrap();
+            (&dwarf).try_into().unwrap_or(Stack::default())
+        }));
+
         trace!("Running for Architecture {}", architecture);
         architecture.add_hooks(cfg);
         let pc_hooks = &cfg.pc_hooks;
@@ -281,6 +298,7 @@ impl<A: Arch> Project<A> {
             range_memory_read_hooks,
             single_memory_write_hooks,
             range_memory_write_hooks,
+            name_stack: stack,
         })
     }
 
@@ -485,6 +503,29 @@ impl<A: Arch> Project<A> {
             },
             WordSize::Bit8 => RawDataWord::Word8([self.get_byte(address)?]),
         })
+    }
+
+    pub fn resolve_register_name(&self, pc: &u64, register_name: &String,_state:&GAState<A>) -> Option<String> {
+        match &self.name_stack {
+            Some(stack) => {
+                let idx = A::register_to_number(register_name)?;
+                match stack.get_register(*pc, idx) {
+                    Some(var) => Some(var.name.clone()),
+                    None => None,
+                }
+            }
+            None => None,
+        }
+    }
+
+    pub fn resolve_address_name(&self, pc: &u64, address: u64,_state:&GAState<A>) -> Option<String> {
+        match &self.name_stack {
+            Some(stack) => match stack.get_address(*pc, address) {
+                Some(var) => Some(var.name.clone()),
+                None => None,
+            },
+            None => None,
+        }
     }
 }
 

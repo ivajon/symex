@@ -55,6 +55,7 @@ where
             name: var.name.clone(),
             value: constant,
             ty: var.ty.clone(),
+            alias: var.alias.clone(),
         };
         results.push(var);
     }
@@ -73,10 +74,11 @@ impl VisualPathResult {
         let registers: Vec<Variable> = state
             .registers
             .iter()
-            .map(|(reg_name, value)| Variable {
+            .map(|(reg_name, (value, alias))| Variable {
                 name: Some(reg_name.to_owned()),
                 value: value.to_owned(),
                 ty: ExpressionType::Integer(state.project.get_word_size() as usize),
+                alias: alias.clone(),
             })
             .collect();
         let end_state = elf_get_values(registers.iter(), &state)?;
@@ -116,24 +118,32 @@ impl fmt::Display for VisualPathResult {
         if !self.symbolics.is_empty() {
             writeln!(f, "\nSymbolic:")?;
             for value in self.symbolics.iter() {
-                let name = if let Some(name) = value.name.as_ref() {
-                    name
+                if let Some(name) = value.alias.as_ref() {
+                    writeln!(indented(f), "{name}: {}", value)?;
                 } else {
-                    "_"
-                };
-                writeln!(indented(f), "{name}: {}", value)?;
+                    let name = if let Some(name) = value.name.as_ref() {
+                        name
+                    } else {
+                        "_"
+                    };
+                    writeln!(indented(f), "{name}: {}", value)?;
+                }
             }
         }
 
         if !self.end_state.is_empty() {
             writeln!(f, "\nEnd state:")?;
             for value in self.end_state.iter() {
-                let name = if let Some(name) = value.name.as_ref() {
-                    name
+                if let Some(name) = value.alias.as_ref() {
+                    writeln!(indented(f), "{name}: {}", value)?;
                 } else {
-                    "_"
-                };
-                writeln!(indented(f), "{name}: {}", value)?;
+                    let name = if let Some(name) = value.name.as_ref() {
+                        name
+                    } else {
+                        "_"
+                    };
+                    writeln!(indented(f), "{name}: {}", value)?;
+                }
             }
         }
 
@@ -197,6 +207,9 @@ pub struct Variable {
 
     /// Simple representation of the variable.
     pub ty: ExpressionType,
+
+    /// A variable may have a name defined in the dwarf debug data.
+    pub alias: Option<String>,
 }
 
 impl fmt::Display for Variable {

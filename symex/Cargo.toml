@@ -24,6 +24,7 @@ disarmv7 = "0.0.1"
 transpiler = {path = "./transpiler"}
 gimli = "0.28.0"
 regex = "1.10.2"
+hashbrown = "0.14.5"
 
 general_assembly = { path = "./general_assembly" }
 

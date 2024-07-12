@@ -30,7 +30,7 @@ fn add_architecture_independent_hooks<A: Arch>(cfg: &mut RunConfig<A>) {
 
         // jump back to where the function was called from
         let lr = state.get_register("LR".to_owned()).unwrap();
-        state.set_register("PC".to_owned(), lr)?;
+        state.set_register("PC".to_owned(), lr, None)?;
         Ok(())
     };
     let end_cyclecount = |state: &mut GAState<A>| {
@@ -43,7 +43,7 @@ fn add_architecture_independent_hooks<A: Arch>(cfg: &mut RunConfig<A>) {
 
         // jump back to where the function was called from
         let lr = state.get_register("LR".to_owned()).unwrap();
-        state.set_register("PC".to_owned(), lr)?;
+        state.set_register("PC".to_owned(), lr, None)?;
         Ok(())
     };
 
@@ -89,9 +89,9 @@ pub fn run_elf(
     let end_pc = 0xFFFFFFFE;
 
     debug!("Parsing elf file: {}", path);
-    let file = fs::read(path).expect("Unable to open file.");
-    let data = file.as_ref();
-    let obj_file = match object::File::parse(data) {
+    // TODO! Check if we can get around this.
+    let file = fs::read(path).expect("Unable to open file.").leak();
+    let obj_file = match object::File::parse(&*file) {
         Ok(x) => x,
         Err(e) => {
             debug!("Error: {}", e);
@@ -172,9 +172,8 @@ pub fn run_elf_configured<A: Arch>(
     let end_pc = 0xFFFFFFFE;
 
     debug!("Parsing elf file: {}", path);
-    let file = fs::read(path).expect("Unable to open file.");
-    let data = file.as_ref();
-    let obj_file = match object::File::parse(data) {
+    let file = fs::read(path).expect("Unable to open file.").leak();
+    let obj_file = match object::File::parse(&*file) {
         Ok(x) => x,
         Err(e) => {
             debug!("Error: {}", e);
