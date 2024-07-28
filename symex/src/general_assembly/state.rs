@@ -1,11 +1,18 @@
 //! Holds the state in general assembly execution.
 
-use std::collections::{HashMap, VecDeque};
+use std::{
+    collections::{HashMap, VecDeque},
+    os::linux::raw::stat,
+};
 
 use general_assembly::{condition::Condition, operand::DataWord};
 use tracing::{debug, trace};
 
-use super::{arch::Arch, instruction::Instruction, project::Project};
+use super::{
+    arch::Arch,
+    instruction::Instruction,
+    project::{string_mapping::FunctionMeta, Project},
+};
 use crate::{
     elf_util::{ExpressionType, Variable},
     general_assembly::{
@@ -50,6 +57,99 @@ pub struct GAState<A: Arch> {
     instruction_counter: usize,
     has_jumped: bool,
     instruction_conditions: VecDeque<Condition>,
+
+    call_stack: CallStack,
+}
+
+#[derive(Debug, Clone)]
+pub enum CallStack {
+    Leaf(FunctionMeta),
+    Nested {
+        name: FunctionMeta,
+        stack: Vec<CallStack>,
+        completed: bool,
+    },
+    PlaceHolder,
+}
+
+enum BfsResult {
+    Leaf,
+    Completed,
+    /// This will need more thought.
+    IncorrectLeaf,
+}
+
+impl CallStack {
+    fn nest_bfs(&mut self, func: FunctionMeta) -> bool {
+        // Assume that the next function is a leaf as we do not have any other
+        // information yet.
+        match self {
+            Self::Leaf(fn_meta) => {
+                *self = Self::Nested {
+                    name: fn_meta.clone(),
+                    stack: vec![Self::Leaf(func)],
+                    completed: false,
+                }
+            }
+            Self::Nested {
+                name: _name,
+                stack: fns,
+                completed: false,
+            } => {
+                let prev_stack_completed = fns
+                    .last_mut()
+                    .expect("CallStack is malformed")
+                    .nest_bfs(func.clone());
+                if prev_stack_completed {
+                    fns.push(Self::Leaf(func))
+                }
+            }
+            Self::Nested {
+                name: _,
+                stack: _,
+                completed: true,
+            } => return false,
+        }
+        return true;
+    }
+
+    fn return_from_function(&mut self, func: FunctionMeta) -> BfsResult {
+        match self {
+            Self::Leaf(fn_meta) => {
+                // We are in a leaf this means that the parent should be set to true.
+                if *fn_meta != func {
+                    return BfsResult::IncorrectLeaf;
+                }
+                return BfsResult::Leaf;
+            }
+            Self::Nested {
+                name: _name,
+                stack: fns,
+                completed: false,
+            } => {
+                let prev_stack_completed = match fns.last_mut() {
+                    Some(stack) => stack.nest_bfs(func.clone()),
+                    None => {
+                        fns.push(Self::Leaf(func));
+                        true
+                    }
+                };
+                if !prev_stack_completed {
+                    fns.push(Self::Leaf(func));
+                }
+            }
+            Self::Nested {
+                name: _,
+                stack: _,
+                completed: true,
+            } => return false,
+        }
+        return true;
+    }
+
+    fn call_function(&mut self, func: FunctionMeta) {
+        self.nest_bfs(func)
+    }
 }
 
 impl<A: Arch> GAState<A> {
@@ -281,6 +381,7 @@ impl<A: Arch> GAState<A> {
                     todo!("handel symbolic branch")
                 }
             };
+            self.project.push_function(&value, self);
             self.pc_register = value;
         }
 

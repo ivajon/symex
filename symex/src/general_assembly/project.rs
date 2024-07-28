@@ -216,7 +216,11 @@ impl<A: Arch> Project<A> {
         self.range_memory_write_hooks = range_memory_write_hooks;
     }
 
-    pub fn from_path(cfg: &mut RunConfig<A>, obj_file: File<'static>, architecture: &A) -> Result<Self> {
+    pub fn from_path(
+        cfg: &mut RunConfig<A>,
+        obj_file: File<'static>,
+        architecture: &A,
+    ) -> Result<Self> {
         let segments = Segments::from_file(&obj_file);
         let endianness = if obj_file.is_little_endian() {
             Endianness::Little
@@ -505,7 +509,12 @@ impl<A: Arch> Project<A> {
         })
     }
 
-    pub fn resolve_register_name(&self, pc: &u64, register_name: &String,_state:&GAState<A>) -> Option<String> {
+    pub fn resolve_register_name(
+        &self,
+        pc: &u64,
+        register_name: &String,
+        _state: &GAState<A>,
+    ) -> Option<String> {
         match &self.name_stack {
             Some(stack) => {
                 let idx = A::register_to_number(register_name)?;
@@ -518,7 +527,35 @@ impl<A: Arch> Project<A> {
         }
     }
 
-    pub fn resolve_address_name(&self, pc: &u64, address: u64,_state:&GAState<A>) -> Option<String> {
+    pub fn push_function(&self, pc: &u64, state: &mut GAState<A>) {
+        match &self.name_stack {
+            Some(stack) => {
+                let pc = *pc;
+                let fn_meta = match stack.get_function(pc) {
+                    Some(f) => f,
+                    None => return,
+                };
+
+                if fn_meta.pc_bound.0 == pc {
+                    // This is a function call.
+                    todo!("This is a function call we need to push it to the GA state")
+                }
+
+                if fn_meta.pc_bound.1 == pc {
+                    // We are returning from a function.
+                    todo!("This is a return statement, we need to pop it from the GA state")
+                }
+            }
+            _ => return,
+        }
+    }
+
+    pub fn resolve_address_name(
+        &self,
+        pc: &u64,
+        address: u64,
+        _state: &GAState<A>,
+    ) -> Option<String> {
         match &self.name_stack {
             Some(stack) => match stack.get_address(*pc, address) {
                 Some(var) => Some(var.name.clone()),

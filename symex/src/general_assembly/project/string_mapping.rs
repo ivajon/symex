@@ -259,9 +259,12 @@ impl<'parent> Stack<'parent> {
 
 #[derive(Clone, Debug)]
 pub struct FunctionMeta {
-    name: String,
-    pc_bound: (u64, u64),
-    path: Option<(String, Option<u64>)>,
+    /// The name of the function.
+    pub name: String,
+    /// The lower and upper bound of the function.
+    pub pc_bound: (u64, u64),
+    /// The Path in the file system including an optional line number.
+    pub path: Option<(String, Option<u64>)>,
 }
 
 #[derive(Clone, Debug)]
