@@ -125,6 +125,7 @@ pub fn run_elf(
                 debug!("Created project: {:?}", project);
 
                 let mut vm = general_assembly::vm::VM::new(project, context, function, end_pc, v7)?;
+
                 return run_elf_paths(&mut vm, &cfg);
             } else if let Some(v6) = ArmV6M::discover(&obj_file)? {
                 let mut cfg = RunConfig {

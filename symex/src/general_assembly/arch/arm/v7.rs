@@ -1,10 +1,11 @@
-use std::fmt::Display;
+use std::{collections::HashSet, fmt::Display};
 
 use decoder::Convert;
 use disarmv7::prelude::{Operation as V7Operation, *};
 use general_assembly::operation::Operation;
 use object::{File, Object};
 use regex::Regex;
+use tracing::warn;
 
 use super::{arm_isa, ArmIsa};
 use crate::{
@@ -26,8 +27,10 @@ pub mod test;
 pub mod timing;
 
 /// Type level denotation for the Armv7-EM ISA.
-#[derive(Debug, Copy, Default, Clone)]
-pub struct ArmV7EM {}
+#[derive(Debug, Default, Clone)]
+pub struct ArmV7EM {
+    pub pc_writes: HashSet<u64>,
+}
 
 impl Arch for ArmV7EM {
     fn add_hooks(&self, cfg: &mut RunConfig<Self>) {
@@ -93,6 +96,21 @@ impl Arch for ArmV7EM {
         cfg.register_read_hooks.push(("SP&".to_owned(), read_sp));
         cfg.register_write_hooks.push(("SP&".to_owned(), write_sp));
 
+        let stack_counter: RegisterWriteHook<Self> = |state, value| {
+            let ret = value.get_constant();
+            if ret.is_some() {
+                warn!("Could not get static version of pc = {:?}", value);
+                return Ok(());
+            }
+            let value = unsafe { ret.unwrap_unchecked() };
+
+            state.architecture.pc_writes.insert(value);
+            Ok(())
+        };
+
+        cfg.register_write_hooks
+            .push(("SP&".to_owned(), stack_counter));
+
         // reset allways done
         let read_reset_done: MemoryReadHook<Self> = |state, _addr| {
             let value = state.ctx.from_u64(0xffff_ffff, 32);
@@ -135,6 +153,10 @@ impl Arch for ArmV7EM {
             ArmIsa::ArmV6M => Ok(None),
             ArmIsa::ArmV7EM => Ok(Some(ArmV7EM::default())),
         }
+    }
+
+    fn get_stack_pointers(&self) -> Option<HashSet<u64>> {
+        Some(self.pc_writes.clone())
     }
 }
 

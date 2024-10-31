@@ -110,16 +110,7 @@ fn run_elf(args: Args) -> Result<()> {
     };
     debug!("Starting analasys on target: {path}, function: {function_name}");
 
-    let cfg = RunConfig {
-        pc_hooks: vec![],
-        register_read_hooks: vec![],
-        register_write_hooks: vec![],
-        memory_read_hooks: vec![],
-        memory_write_hooks: vec![],
-        show_path_results: true,
-    };
-
-    symex::run_elf::run_elf(&path, &function_name, cfg)?;
+    symex::run_elf::run_elf(&path, &function_name, true)?;
     Ok(())
 }
 

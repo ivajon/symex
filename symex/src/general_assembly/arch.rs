@@ -7,7 +7,10 @@
 //! architecture specific hooks.
 
 pub mod arm;
-use std::fmt::{Debug, Display};
+use std::{
+    collections::HashSet,
+    fmt::{Debug, Display},
+};
 
 use arm::{v6::ArmV6M, v7::ArmV7EM};
 use object::File;
@@ -84,7 +87,7 @@ pub enum Architecture {
 ///
 /// Denotes that the implementer can be treated as an architecture in this
 /// crate.
-pub trait Arch: Debug + Display + Clone + Copy + Sized + 'static {
+pub trait Arch: Debug + Display + Clone + Sized + 'static {
     /// Converts a slice of bytes to an [`Instruction`]
     fn translate(&self, buff: &[u8], state: &GAState<Self>)
         -> Result<Instruction<Self>, ArchError>;
@@ -95,4 +98,8 @@ pub trait Arch: Debug + Display + Clone + Copy + Sized + 'static {
     /// Returns an instance of self if the file is defined for this
     /// specific architecture.
     fn discover(file: &File) -> Result<Option<Self>, ArchError>;
+
+    fn get_stack_pointers(&self) -> Option<HashSet<u64>> {
+        None
+    }
 }

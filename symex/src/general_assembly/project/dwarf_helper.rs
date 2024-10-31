@@ -57,7 +57,7 @@ pub fn construct_pc_hooks<R: Reader, A: Arch>(
 
                     if let AttributeValue::Addr(addr_value) = addr {
                         trace!("found hook for {} att addr: {:#X}", name, addr_value);
-                        ret.insert(addr_value, *hook);
+                        ret.insert(addr_value, hook.clone());
                     }
                 }
             }
@@ -112,7 +112,7 @@ pub fn construct_pc_hooks_no_index<R: Reader, A: Arch>(
 
                     if let AttributeValue::Addr(addr_value) = addr {
                         trace!("found hook for {} att addr: {:#X}", name, addr_value);
-                        ret.insert(addr_value, *hook);
+                        ret.insert(addr_value, hook.clone());
                     }
                 }
             }
