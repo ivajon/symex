@@ -5,7 +5,7 @@ use disarmv7::prelude::{Operation as V7Operation, *};
 use general_assembly::operation::Operation;
 use object::{File, Object};
 use regex::Regex;
-use tracing::warn;
+use tracing::{trace, warn};
 
 use super::{arm_isa, ArmIsa};
 use crate::{
@@ -88,6 +88,15 @@ impl Arch for ArmV7EM {
             )?;
             let sp = state.get_register("SP".to_owned()).unwrap();
             let sp = sp.simplify();
+            let ret = sp.get_constant();
+            if ret.is_none() {
+                warn!("Could not get static version of sp = {:?}", value);
+                return state.set_register("SP".to_owned(), sp);
+            }
+            let value = unsafe { ret.unwrap_unchecked() };
+
+            trace!("Wrote {value} to SP");
+            state.architecture.pc_writes.insert(value);
             state.set_register("SP".to_owned(), sp)
         };
 
@@ -95,21 +104,6 @@ impl Arch for ArmV7EM {
         cfg.register_write_hooks.push(("PC+".to_owned(), write_pc));
         cfg.register_read_hooks.push(("SP&".to_owned(), read_sp));
         cfg.register_write_hooks.push(("SP&".to_owned(), write_sp));
-
-        let stack_counter: RegisterWriteHook<Self> = |state, value| {
-            let ret = value.get_constant();
-            if ret.is_some() {
-                warn!("Could not get static version of pc = {:?}", value);
-                return Ok(());
-            }
-            let value = unsafe { ret.unwrap_unchecked() };
-
-            state.architecture.pc_writes.insert(value);
-            Ok(())
-        };
-
-        cfg.register_write_hooks
-            .push(("SP&".to_owned(), stack_counter));
 
         // reset allways done
         let read_reset_done: MemoryReadHook<Self> = |state, _addr| {
@@ -128,6 +122,7 @@ impl Arch for ArmV7EM {
         let mut buff: disarmv7::buffer::PeekableBuffer<u8, _> = buff.iter().cloned().into();
 
         let instr = V7Operation::parse(&mut buff).map_err(|e| ArchError::ParsingError(e.into()))?;
+        trace!("Running {:?}", instr.1);
         let timing = Self::cycle_count_m4_core(&instr.1);
         let ops: Vec<Operation> = instr.clone().convert(state.get_in_conditional_block());
 
@@ -187,7 +182,7 @@ impl From<disarmv7::ParseError> for ParseError {
             }
             disarmv7::ParseError::InvalidField(_) => ParseError::MalfromedInstruction,
             disarmv7::ParseError::Incomplete32Bit => ParseError::InsufficientInput,
-            disarmv7::ParseError::InternalError(info) => ParseError::Generic(info),
+            disarmv7::ParseError::InternalError(trace) => ParseError::Generic(info),
             disarmv7::ParseError::IncompleteParser => {
                 ParseError::Generic("Encountered instruction that is not yet supported.")
             }

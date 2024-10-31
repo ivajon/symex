@@ -45,6 +45,7 @@ pub struct GAState<A: Arch> {
     pub continue_in_instruction: Option<ContinueInsideInstruction<A>>,
     pub current_instruction: Option<Instruction<A>>,
     pub architecture: A,
+    pub inital_sp: u64,
     pc_register: u64, // this register is special
     flags: HashMap<String, DExpr>,
     instruction_counter: usize,
@@ -115,6 +116,7 @@ impl<A: Arch> GAState<A> {
             current_instruction: None,
             instruction_conditions: VecDeque::new(),
             architecture,
+            inital_sp: sp_reg,
         })
     }
 
@@ -233,6 +235,7 @@ impl<A: Arch> GAState<A> {
             registers,
             pc_register: pc_reg,
             flags,
+            inital_sp: start_pc,
             instruction_counter: 0,
             has_jumped: false,
             last_instruction: None,
@@ -264,12 +267,13 @@ impl<A: Arch> GAState<A> {
                                 None => todo!("e"),
                             })
                             .collect(),
-                        crate::smt::Solutions::AtLeast(_v) => todo!(),
+                        crate::smt::Solutions::AtLeast(_v) => todo!("Handle with lower bound, this should likely be done using a sub sample of the signal"),
                     };
                     trace!("{} possible PC values", values.len());
                     for v in values {
                         trace!("Possible PC: {:#X}", v);
                     }
+
                     todo!("handel symbolic branch")
                 }
             };

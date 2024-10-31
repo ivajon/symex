@@ -54,6 +54,10 @@ fn add_architecture_independent_hooks<A: Arch>(cfg: &mut RunConfig<A>) {
             PCHook::EndFailure("explicit panic"),
         ),
         (
+            Regex::new("^unwrap_failed$").unwrap(),
+            PCHook::EndFailure("unwrap failed"),
+        ),
+        (
             Regex::new(r"^panic_bounds_check$").unwrap(),
             PCHook::EndFailure("bounds check panic"),
         ),
@@ -70,7 +74,10 @@ fn add_architecture_independent_hooks<A: Arch>(cfg: &mut RunConfig<A>) {
             Regex::new(r"^end_cyclecount$").unwrap(),
             PCHook::Intrinsic(end_cyclecount),
         ),
-        (Regex::new(r"^panic$").unwrap(), PCHook::EndFailure("panic")),
+        (
+            Regex::new(r"^panic_*").unwrap(),
+            PCHook::EndFailure("panic"),
+        ),
     ]);
 }
 

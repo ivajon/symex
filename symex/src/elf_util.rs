@@ -46,6 +46,9 @@ pub struct VisualPathResult {
 
     /// All of the stack pointer writes.
     pub stack_usage: Option<HashSet<u64>>,
+
+    /// The initial stack pointer for this path.
+    pub initial_sp: u64,
 }
 
 fn elf_get_values<'a, I>(vars: I, state: &GAState<impl Arch>) -> Result<Vec<Variable>, GAError>
@@ -92,6 +95,7 @@ impl VisualPathResult {
             symbolics,
             end_state,
             instruction_count: state.get_instruction_count(),
+            initial_sp: state.inital_sp,
             max_cycles: state.cycle_count,
             cycle_laps: state.cycle_laps.clone(),
         })
@@ -137,7 +141,7 @@ impl fmt::Display for VisualPathResult {
                     name
                 } else {
                     "_"
-                };
+                };git push --set-upstream origin move_to_m7 
                 writeln!(indented(f), "{name}: {}", value)?;
             }
         }
@@ -147,10 +151,12 @@ impl fmt::Display for VisualPathResult {
         writeln!(f, "Max number of cycles: {}", self.max_cycles)?;
 
         if let Some(stack) = &self.stack_usage {
-            let max = stack.iter().max();
             let min = stack.iter().min();
-            if let (Some(max), Some(min)) = (max, min) {
-                writeln!(f, "Stack usage: {}", max - min)?;
+            let max = stack.iter().max();
+
+            if let (Some(_max), Some(min)) = (max, min) {
+                writeln!(f, "Stack usage: {}", self.initial_sp - min)?;
+                //writeln!(f, "Stack usage: {}", max - min)?;
             }
         }
 
