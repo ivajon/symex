@@ -1,5 +1,5 @@
 //! Simple runner that starts symbolic execution on LLVM bitcode.
-use std::{fs, time::Instant};
+use std::{fs, path::Path, time::Instant};
 
 use object::{Architecture, Object};
 use regex::Regex;
@@ -85,8 +85,8 @@ fn add_architecture_independent_hooks<A: Arch>(cfg: &mut RunConfig<A>) {
 /// file and `function` is the function the execution starts at.
 /// During runtime it will determin the target architecture and select the
 /// appropriate executor for that enviornement.
-pub fn run_elf(
-    path: &str,
+pub fn run_elf<P: AsRef<Path>>(
+    path: P,
     function: &str,
     show_path_results: bool,
 ) -> Result<Vec<VisualPathResult>, GAError> {
@@ -95,14 +95,15 @@ pub fn run_elf(
 
     let end_pc = 0xFFFFFFFE;
 
-    debug!("Parsing elf file: {}", path);
+    let str_version = path.as_ref().display().to_string();
+    debug!("Parsing elf file: {}", str_version);
     let file = fs::read(path).expect("Unable to open file.");
     let data = file.as_ref();
     let obj_file = match object::File::parse(data) {
         Ok(x) => x,
         Err(e) => {
             debug!("Error: {}", e);
-            return Err(ProjectError::UnableToParseElf(path.to_owned()))?;
+            return Err(ProjectError::UnableToParseElf(str_version))?;
         }
     };
 

@@ -182,7 +182,7 @@ impl From<disarmv7::ParseError> for ParseError {
             }
             disarmv7::ParseError::InvalidField(_) => ParseError::MalfromedInstruction,
             disarmv7::ParseError::Incomplete32Bit => ParseError::InsufficientInput,
-            disarmv7::ParseError::InternalError(trace) => ParseError::Generic(info),
+            disarmv7::ParseError::InternalError(info) => ParseError::Generic(info),
             disarmv7::ParseError::IncompleteParser => {
                 ParseError::Generic("Encountered instruction that is not yet supported.")
             }

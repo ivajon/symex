@@ -1,11 +1,4 @@
 //! Defines the supported ARM architectures
-//!
-//! ## Construction
-//!
-//! The [`Arm`] struct is used as a middle hand
-//! for construction of the different ISAs
-//! supported by this crate and presents
-//! the ISAs as dyn [`Arch`] types.
 pub mod v6;
 pub mod v7;
 

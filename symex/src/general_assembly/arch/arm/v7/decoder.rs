@@ -660,10 +660,12 @@ impl Convert for (usize, V7Operation) {
                 // TODO! Decide wether or not to use this 
                 V7Operation::Dbg(_) => vec![],
                 V7Operation::Dmb(_) => {
-                    todo!("This requires an exhaustive rewrite of the system to allow memory barriers")
+                    tracing::warn!("DMB: This requires an exhaustive rewrite of the system to allow memory barriers");
+                    vec![]
                 }
                 V7Operation::Dsb(_) => {
-                    todo!("This requires an exhaustive rewrite of the system to allow memory barriers")
+                    tracing::warn!("DSB: This requires an exhaustive rewrite of the system to allow memory barriers");
+                    vec![]
                 }
                 V7Operation::EorImmediate(eor) => {
                     consume!(
@@ -716,7 +718,12 @@ impl Convert for (usize, V7Operation) {
                     ret
 
                 }
-                V7Operation::Isb(_) => todo!("This needs to be revisited when the executor can handle it"),
+                // NOTE: This is used in un-analyzable code. If the barrier fails we cannot loop
+                // for ever.
+                V7Operation::Isb(_) => {
+                    tracing::warn!("Encounted ISB instruction. This cannot be analyzed, using a noop instead.");
+                    vec![]
+                }, //todo!("This needs to be revisited when the executor can handle it"),
                 V7Operation::It(it) => {
                     vec![
                     Operation::ConditionalExecution { 
@@ -1628,7 +1635,8 @@ impl Convert for (usize, V7Operation) {
                                 }
                             }
                             // Discarding the SP things for now
-                            // TODO! add in SP things
+                            // TODO! add in SP things, it is worth noting that this is
+                            // for privileged execution only.
                             if (((sysm>>3) & 0b11111) == 2 && (sysm&0b111 == 0)) {
                                 // TODO! Add in priv checks
                                 primask = primask<31:1> << 1.local_into();
@@ -1841,6 +1849,9 @@ impl Convert for (usize, V7Operation) {
                     ret
                 }
                 V7Operation::PldImmediate(_pld) => {
+                    // NOTE:
+                    // This should be logged in the ARMv7 struct so we can know that the address
+                    // was preloaded in the cycle estimates.
                     todo!(" We need some speciality pre load instruction here")
                 }
                 V7Operation::PldLiteral(_) => todo!(" We need some speciality pre load instruction here"),
@@ -2293,7 +2304,7 @@ impl Convert for (usize, V7Operation) {
                     ])
                 }
                 V7Operation::Sel(_) => todo!("SIMD"),
-                V7Operation::Sev(_) => todo!("Modelling"),
+                V7Operation::Sev(_) => vec![],// todo!("Modelling"),
                 V7Operation::Shadd16(shadd) => {
                     consume!((
                             rn.local_into(),
@@ -2382,6 +2393,23 @@ impl Convert for (usize, V7Operation) {
                             rm.local_into()
                             ) from shsub);
                     // TODO! Check that the overflow here is not problematic
+                    //
+                    // // SInt()
+                    // // ======
+                    //integer SInt(bits(N) x)
+                    //result = 0;
+                    //for i = 0 to N-1
+                    //if x<i> == ‘1’ then result = result + 2^i;
+                    //if x<N-1> == ‘1’ then result = result - 2^N;
+                    //return result;
+                    //UInt(x) is the integer whose unsigned representation is x:
+                    // // UInt()
+                    // // ======
+                    //integer UInt(bits(N) x)
+                    //result = 0;
+                    //for i = 0 to N-1
+                    //if x<i> == ‘1’ then result = result + 2^i;
+                    //return result;
                     pseudo!([
                             let diff1 = ZeroExtend(Signed(Resize(rn<7:0>,8) - Resize(rm<7:0>,8)),32);
                             let diff2 = ZeroExtend(Signed(Resize(rn<15:8>,8) - Resize(rm<15:8>,8)),32);
@@ -3330,8 +3358,7 @@ impl Convert for (usize, V7Operation) {
                         rd = diff1<15:0>;
                         diff2 = diff2<15:0> << 16.local_into();
                         rd = rd | diff2;
-
-                            // TODO! Look in to the GE register setting
+                        // TODO! Look in to the GE register setting
                     ])
                 }
                 V7Operation::Usub8(_) => {
@@ -3401,9 +3428,13 @@ impl Convert for (usize, V7Operation) {
                         rd = ZeroExtend(rotated<15:0>,32);
                     ])
                 }
-                V7Operation::Wfe(_) => todo!("This requires extensive system modelling"),
-                V7Operation::Wfi(_) => todo!("This requires extensive system modelling"),
-                V7Operation::Yield(_) => todo!("This requires extensive system modelling"),
+                //Here we have to assume intant return.
+                V7Operation::Wfe(_) => vec![],//todo!("This requires extensive system modelling"), //
+                //Here we have to assume intant return.
+                V7Operation::Wfi(_) => vec![],//todo!("This requires extensive system modelling"),
+                //Here we have to assume intant return.
+                V7Operation::Yield(_) => vec![],//todo!("This requires extensive system modelling"),
+                // I think that we should simply write Any here. i.e. they are noops.
                 V7Operation::Svc(_) => todo!(),
                 V7Operation::Stc(_) => todo!(),
                 V7Operation::Mcr(_) => todo!(),

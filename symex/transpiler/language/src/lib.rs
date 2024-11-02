@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use quote::format_ident;
 use syn::Ident;
 
-/// All possible errors that can occur when using the [`TranspilerState`].
+/// All possible errors that can occur when transpiling against some target.
 #[derive(Debug)]
 pub enum Error {
     /// The program tried to access a variable that did not exist yet.

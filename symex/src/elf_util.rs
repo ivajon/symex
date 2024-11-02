@@ -141,7 +141,7 @@ impl fmt::Display for VisualPathResult {
                     name
                 } else {
                     "_"
-                };git push --set-upstream origin move_to_m7 
+                };
                 writeln!(indented(f), "{name}: {}", value)?;
             }
         }
