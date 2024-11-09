@@ -5,7 +5,7 @@ use disarmv7::prelude::{Operation as V7Operation, *};
 use general_assembly::operation::Operation;
 use object::{File, Object};
 use regex::Regex;
-use tracing::{trace, warn};
+use tracing::{info, trace, warn};
 
 use super::{arm_isa, ArmIsa};
 use crate::{
@@ -122,7 +122,7 @@ impl Arch for ArmV7EM {
         let mut buff: disarmv7::buffer::PeekableBuffer<u8, _> = buff.iter().cloned().into();
 
         let instr = V7Operation::parse(&mut buff).map_err(|e| ArchError::ParsingError(e.into()))?;
-        trace!("Running {:?}", instr.1);
+        info!("Running {:?}", instr.1);
         let timing = Self::cycle_count_m4_core(&instr.1);
         let ops: Vec<Operation> = instr.clone().convert(state.get_in_conditional_block());
 
