@@ -74,8 +74,6 @@ fn run() -> Result<()> {
 
 #[cfg(not(feature = "llvm"))]
 fn run_elf(args: Args) -> Result<()> {
-    use symex::general_assembly::RunConfig;
-
     use crate::build::generate_binary_build_command;
 
     debug!("Run elf file.");
@@ -185,7 +183,6 @@ fn settings_from_args(opts: &Args) -> Settings {
         target,
         features,
         release: opts.release,
-        embed_bitcode: opts.embed_bitcode.unwrap_or(false),
     }
 }
 
