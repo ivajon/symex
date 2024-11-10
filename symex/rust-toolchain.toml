@@ -1,6 +1,0 @@
-[toolchain]
-channel = "nightly-2022-09-04"
-components = ["rustfmt", "rustc-dev"]
-targets = ["thumbv7em-none-eabihf"]
-# targets = [ "wasm32-unknown-unknown", "thumbv2-none-eabi" ]
-profile = "minimal"

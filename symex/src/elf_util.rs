@@ -151,13 +151,8 @@ impl fmt::Display for VisualPathResult {
         writeln!(f, "Max number of cycles: {}", self.max_cycles)?;
 
         if let Some(stack) = &self.stack_usage {
-            let min = stack.iter().min();
-            let max = stack.iter().max();
-
-            if let (Some(_max), Some(min)) = (max, min) {
-                writeln!(f, "Stack usage: {}", self.initial_sp - min)?;
-                //writeln!(f, "Stack usage: {}", max - min)?;
-            }
+            let min = stack.iter().min().unwrap_or(&self.initial_sp);
+            writeln!(f, "Stack usage: {} bytes", self.initial_sp - min)?;
         }
 
         Ok(())

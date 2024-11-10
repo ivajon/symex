@@ -158,7 +158,9 @@ impl super::ArmV7EM {
                     CycleCount::Function(counter)
                 } else {
                     // CycleCount::Value(1 + 3)
-                    CycleCount::Value(1 + 1)
+
+                    // This is a gross over estimation, it should be more like 1+1
+                    CycleCount::Value(1 + 3)
                 }
             }
             V7Operation::Bfc(_) => CycleCount::Value(1),
