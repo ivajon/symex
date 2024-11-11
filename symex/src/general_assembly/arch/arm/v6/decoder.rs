@@ -476,6 +476,7 @@ impl ArmV6M {
                     destination: arm_register_to_ga_operand(t),
                     operand: arm_register_to_ga_operand(t),
                     bits: 8,
+                    target_bits: 32,
                 },
             ],
             Operation::LDRBReg { m, n, t } => vec![
@@ -496,6 +497,7 @@ impl ArmV6M {
                     destination: arm_register_to_ga_operand(t),
                     operand: arm_register_to_ga_operand(t),
                     bits: 8,
+                    target_bits: 32,
                 },
             ],
             Operation::LDRHImm { imm, n, t } => vec![
@@ -516,6 +518,7 @@ impl ArmV6M {
                     destination: arm_register_to_ga_operand(t),
                     operand: arm_register_to_ga_operand(t),
                     bits: 16,
+                    target_bits: 32,
                 },
             ],
             Operation::LDRHReg { m, n, t } => vec![
@@ -536,6 +539,7 @@ impl ArmV6M {
                     destination: arm_register_to_ga_operand(t),
                     operand: arm_register_to_ga_operand(t),
                     bits: 16,
+                    target_bits: 32,
                 },
             ],
             Operation::LDRSBReg { m, n, t } => vec![
@@ -1367,11 +1371,13 @@ impl ArmV6M {
                 destination: arm_register_to_ga_operand(d),
                 operand: arm_register_to_ga_operand(m),
                 bits: 8,
+                target_bits: 32,
             }],
             Operation::UXTH { m, d } => vec![GAOperation::ZeroExtend {
                 destination: arm_register_to_ga_operand(d),
                 operand: arm_register_to_ga_operand(m),
                 bits: 16,
+                target_bits: 32,
             }],
             Operation::WFE => todo!(),
             Operation::WFI => todo!(),

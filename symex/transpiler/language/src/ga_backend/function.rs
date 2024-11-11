@@ -300,7 +300,8 @@ impl Compile for ZeroExtend {
         let bits = self.bits.clone();
         state.to_insert_above.push(quote!(Operation::ZeroExtend {
                 destination: #intermediate.clone(),
-                operand: #operand, bits: #bits.clone()
+                operand: #operand, bits: #bits.clone(), target_bits: #bits.clone()
+
         }));
         Ok(quote!(#intermediate))
     }

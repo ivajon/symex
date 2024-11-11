@@ -748,10 +748,11 @@ impl<'vm, A: Arch> GAExecutor<'vm, A> {
                 destination,
                 operand,
                 bits,
+                target_bits,
             } => {
                 let op = self.get_operand_value(operand, local)?;
                 let valid_bits = op.resize_unsigned(*bits);
-                let result = valid_bits.zero_ext(self.project.get_word_size());
+                let result = valid_bits.zero_ext(*target_bits);
                 self.set_operand_value(destination, result, local)?;
             }
             Operation::SignExtend {

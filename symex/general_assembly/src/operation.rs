@@ -203,11 +203,16 @@ pub enum Operation {
     ZeroExtend {
         /// Where to store the result.
         destination: Operand,
+
         /// The value to be zero extended.
         operand: Operand,
+
         /// What bit is considered the last bit in operand
         /// before the extension.
         bits: u32,
+
+        /// The size of the output value.
+        target_bits: u32,
     },
 
     /// Count the number of ones in the operand.
