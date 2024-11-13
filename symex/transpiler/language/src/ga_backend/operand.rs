@@ -92,41 +92,53 @@ impl Compile for FieldExtract {
         &self,
         state: &mut crate::TranspilerState<Self::Output>,
     ) -> Result<Self::Output, Error> {
-        let intermediate1 = state.intermediate().compile(state)?;
-        let intermediate2 = state.intermediate().compile(state)?;
+        let intermediate = state.intermediate().compile(state)?;
+        let operand = self.operand.clone();
+        state.access(operand.clone());
         let (start, end) = (
             self.start.clone().compile(state)?,
             self.end.clone().compile(state)?,
         );
-        state.access(self.operand.clone());
-        let operand = self.operand.clone();
-        let ty = self.ty.clone().unwrap_or(syn::parse_quote!(u32));
-        state.to_insert_above.extend([
-            quote!(
-                Operation::Srl {
-                    destination: #intermediate1.clone(),
-                    operand: #operand.clone(),
-                    shift: Operand::Immediate((#start as #ty).into())
-                }
-            ),
-            quote!(
-                #[allow(clippy::unnecessary_cast)]
-                Operation::And {
-                    destination: #intermediate2.clone(),
-                    operand1: #intermediate1.clone(),
-                    operand2: Operand::Immediate(
-                        (
-                            (
-                                (
-                                    (0b1u64 << (#end as u64 - #start as u64 + 1u64)) as u64
-                                ) - (1 as u64)
-                            )as #ty
-                        ).into()
-                    )
 
-                }
-            ),
-        ]);
-        Ok(quote!(#intermediate2))
+        state.to_insert_above.extend([quote! (
+            Operation::BitFieldExtract{
+                destination: #intermediate.clone(),
+                operand: #operand.clone(),
+                start_bit: #start,
+                stop_bit: #end,
+            }
+        )]);
+        Ok(quote! {#intermediate})
+
+        //let intermediate2 = state.intermediate().compile(state)?;
+        //state.access(self.operand.clone());
+        //let ty = self.ty.clone().unwrap_or(syn::parse_quote!(u32));
+        //state.to_insert_above.extend([
+        //    quote!(
+        //        Operation::Srl {
+        //            destination: #intermediate1.clone(),
+        //            operand: #operand.clone(),
+        //            shift: Operand::Immediate((#start as #ty).into())
+        //        }
+        //    ),
+        //    quote!(
+        //        #[allow(clippy::unnecessary_cast)]
+        //        Operation::And {
+        //            destination: #intermediate2.clone(),
+        //            operand1: #intermediate1.clone(),
+        //            operand2: Operand::Immediate(
+        //                (
+        //                    (
+        //                        (
+        //                            (0b1u64 << (#end as u64 - #start as u64 +
+        // 1u64)) as u64                        ) - (1 as u64)
+        //                    )as #ty
+        //                ).into()
+        //            )
+        //
+        //        }
+        //    ),
+        //]);
+        //Ok(quote!(#intermediate2))
     }
 }

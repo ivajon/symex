@@ -215,6 +215,19 @@ pub enum Operation {
         target_bits: u32,
     },
 
+    /// Extracts start_bit until stop_bit from the operand and right adjusts it
+    /// in to destination.
+    BitFieldExtract {
+        /// Where to store the result.
+        destination: Operand,
+        /// Which value to extract bits from.
+        operand: Operand,
+        /// Where to start the extraction.
+        start_bit: u32,
+        /// Where to stop the extraction.
+        stop_bit: u32,
+    },
+
     /// Count the number of ones in the operand.
     #[allow(missing_docs)]
     CountOnes {

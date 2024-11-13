@@ -421,18 +421,13 @@ impl Convert for (usize, V7Operation) {
                     consume!((rd,rn,lsb,msb) from bfi);
                     let (rd, rn) = (rd.local_into(), rn.local_into());
                     let diff = msb - lsb;
+                    let nmask = (!(mask_dyn(lsb,msb) << lsb)).local_into();
                     assert!(msb >= lsb, "would be unpredictable");
                     pseudo!([
                         // Assume happy case here
-                        
-                        let mask = (1 << lsb).local_into();
-                        if (diff > 0) {
-                            mask = ((diff - 1) << lsb).local_into();
-                        }
-                        mask = ! mask;
-                        rd = rd & mask;
+                        rd = rd & nmask;
                         let intermediate = rn<diff:0> << lsb.local_into();
-                        rd = rd | intermediate;
+                        rd |= intermediate;
                     ])
                 }
                 V7Operation::BicImmediate(bic) => {
@@ -1871,7 +1866,7 @@ impl Convert for (usize, V7Operation) {
                             to_pop.push(reg.local_into());
                         }
                     }
-
+                    //const REMOVE_LAST_BIT_MASK:u32 = !0b1;
                     pseudo!([
                         let address = Register("SP&");
                         Register("SP&") += (4*bc).local_into();
@@ -3305,8 +3300,8 @@ impl Convert for (usize, V7Operation) {
 
                         result = ZeroExtend(result,64) + rd_composite;
 
-                        rdhi = result<63:32:u64>;
-                        rdlo = result<32:0:u64>;
+                        rdhi = Resize(result<63:32:u64>,32);
+                        rdlo = Resize(result<32:0:u64>,32);
                     ])
                 }
                 V7Operation::Umull(umull) => {

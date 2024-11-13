@@ -876,6 +876,35 @@ impl<'vm, A: Arch> GAExecutor<'vm, A> {
                     count_leading_zeroes(&operand, self.state.ctx, self.project.get_word_size());
                 self.set_operand_value(destination, result, local)?;
             }
+            Operation::BitFieldExtract {
+                destination,
+                operand,
+                start_bit,
+                stop_bit,
+            } => {
+                assert!(
+                    start_bit <= stop_bit,
+                    "Tried to extract from {start_bit} until {stop_bit}"
+                );
+                let operand = self.get_operand_value(operand, local)?;
+                let mask: u64 = if start_bit == stop_bit {
+                    1
+                } else {
+                    // This seems a bit strange, but if we want bit 0 -> 2 we should extract 0b111
+                    // = 1 << 3 - 1 => 1 << (2 - 0 + 1) - 1
+                    (1 << (*stop_bit - *start_bit + 1)) - 1
+                };
+                let operand = operand
+                    .srl(
+                        &self
+                            .state
+                            .ctx
+                            .from_u64(*start_bit as u64, self.project.get_word_size()),
+                    )
+                    .and(&self.state.ctx.from_u64(mask, self.project.get_word_size()))
+                    .simplify();
+                self.set_operand_value(destination, operand, local)?;
+            }
         }
         Ok(())
     }
