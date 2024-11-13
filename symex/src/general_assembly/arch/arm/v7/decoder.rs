@@ -100,6 +100,8 @@ macro_rules! local {
 }
 
 
+/// Simply forces the least significant bit to zero.
+const REMOVE_LAST_BIT_MASK:u32 = !0b1;
 pub trait Convert {
     fn convert(self,in_it_block:bool) -> Vec<Operation>;
 }
@@ -210,7 +212,7 @@ impl Convert for (usize, V7Operation) {
                     pseudo!(ret.extend[
                         let result = shifted + rn;
                         if (should_jump) {
-                            result = result<31:1> << 1.local_into();
+                            result = result & REMOVE_LAST_BIT_MASK.local_into();
                             Jump(result);
                         } else {
                             if (s) {
@@ -401,7 +403,7 @@ impl Convert for (usize, V7Operation) {
                     let (condition, imm) = (condition.local_into(), imm.local_into());
                     pseudo!([
                         let target = Register("PC+") + imm;
-                        target = target<31:1> << 1.local_into();
+                        target = target & REMOVE_LAST_BIT_MASK.local_into();
                         Jump(target,condition);
                     ])
                 }
@@ -493,10 +495,10 @@ impl Convert for (usize, V7Operation) {
                     
                     pseudo!([
                             let next_instr_addr = Register("PC+");
-                            Register("LR") = next_instr_addr<31:1> << 1.local_into();
+                            Register("LR") = next_instr_addr & REMOVE_LAST_BIT_MASK.local_into();
                             Register("LR") |= 0b1.local_into();
                             next_instr_addr = Register("PC+") + imm;
-                            next_instr_addr = next_instr_addr<31:1> << 1.local_into();
+                            next_instr_addr = next_instr_addr & REMOVE_LAST_BIT_MASK.local_into();
                             Register("PC+") = next_instr_addr;
                     ])
                 }
@@ -507,10 +509,10 @@ impl Convert for (usize, V7Operation) {
                         let target = rm;
                         let next_instr_addr = Register("PC+") - 2.local_into();
 
-                        Register("LR") = next_instr_addr<31:1> << 1.local_into();
+                        Register("LR") = next_instr_addr & REMOVE_LAST_BIT_MASK.local_into();
                         Register("LR") |= 1.local_into();
                         Register("EPSR") = Register("EPSR") | (1 << 27).local_into();
-                        target = target<31:1> << 1.local_into();
+                        target = target & REMOVE_LAST_BIT_MASK.local_into();
                         Register("PC+") = target;
                     ])
                 }
@@ -519,7 +521,7 @@ impl Convert for (usize, V7Operation) {
                     let rm = bx.rm.local_into();
                     pseudo!([
                         let next_addr = rm;
-                        next_addr = next_addr<31:1> << 1.local_into();
+                        next_addr = next_addr & REMOVE_LAST_BIT_MASK.local_into();
                         Register("PC+") = next_addr;
                     ])
                 }
@@ -539,7 +541,7 @@ impl Convert for (usize, V7Operation) {
                         let old_z = Flag("Z");
                         SetZFlag(rn);
                         let dest = Register("PC+") + imm;
-                        dest = dest<31:1> << 1.local_into();
+                        dest = dest & REMOVE_LAST_BIT_MASK.local_into();
                         Jump(dest,cond);
                         Flag("Z") = old_z;
                     ])
@@ -757,7 +759,7 @@ impl Convert for (usize, V7Operation) {
 
                         if (contained) {
                             let target = LocalAddress(address,4);
-                            target = target<31:1> << 1.local_into();
+                            target = target & REMOVE_LAST_BIT_MASK.local_into();
                             Jump(target);
                         }
                         if (w) {
@@ -798,7 +800,7 @@ impl Convert for (usize, V7Operation) {
 
                         if (contained) {
                             let target = LocalAddress(address,4);
-                            target = target<31:1> << 1.local_into();
+                            target = target & REMOVE_LAST_BIT_MASK.local_into();
                             Jump(target);
                         }
                         if (w) {
@@ -831,7 +833,7 @@ impl Convert for (usize, V7Operation) {
                         }
 
                         if (is_pc) {
-                            data = data<31:1> << 1.local_into();
+                            data = data & REMOVE_LAST_BIT_MASK.local_into();
                             Jump(data);
                         }
                         else {
@@ -860,7 +862,7 @@ impl Convert for (usize, V7Operation) {
 
                         let data = LocalAddress(address,32);
                         if (rt == Register::PC){
-                            data = data<31:1> << 1.local_into();
+                            data = data & REMOVE_LAST_BIT_MASK.local_into();
                             Jump(data);
                         }
                         else {
@@ -901,7 +903,7 @@ impl Convert for (usize, V7Operation) {
                        }
 
                        if (rt_old == Register::PC){
-                           data = data<31:1> << 1.local_into();
+                           data = data & REMOVE_LAST_BIT_MASK.local_into();
                            Jump(data);
                        }
                        else {
@@ -1515,7 +1517,7 @@ impl Convert for (usize, V7Operation) {
                     consume!((s,rd, rm.local_into()) from mov);
                     if rd == Register::PC {
                         break 'outer_block pseudo!([
-                           let dest = rm<31:1> << 1.local_into();
+                           let dest = rm & REMOVE_LAST_BIT_MASK.local_into();
                            Jump(dest);
                         ]);
                     }
@@ -1634,7 +1636,7 @@ impl Convert for (usize, V7Operation) {
                             // for privileged execution only.
                             if (((sysm>>3) & 0b11111) == 2 && (sysm&0b111 == 0)) {
                                 // TODO! Add in priv checks
-                                primask = primask<31:1> << 1.local_into();
+                                primask = primask & REMOVE_LAST_BIT_MASK.local_into();
                                 let intermediate = rn<0:0>;
                                 apsr |= intermediate;
                             }
@@ -1652,7 +1654,7 @@ impl Convert for (usize, V7Operation) {
                             }
                             if (((sysm>>3) & 0b11111) == 2 && (sysm&0b111 == 2)) {
                                 // TODO! Add om priv and priority checks here
-                                faultmask = faultmask<31:1> << 1.local_into();
+                                faultmask = faultmask & REMOVE_LAST_BIT_MASK.local_into();
                                 let intermediate = rn<0:0>;
                                 faultmask |= intermediate;
                             }
@@ -1866,7 +1868,6 @@ impl Convert for (usize, V7Operation) {
                             to_pop.push(reg.local_into());
                         }
                     }
-                    //const REMOVE_LAST_BIT_MASK:u32 = !0b1;
                     pseudo!([
                         let address = Register("SP&");
                         Register("SP&") += (4*bc).local_into();
@@ -1877,7 +1878,7 @@ impl Convert for (usize, V7Operation) {
                         }
                         if (jump) {
                             address = LocalAddress(address,32);
-                            address = address<31:1> << 1.local_into();
+                            address = address & REMOVE_LAST_BIT_MASK.local_into();
                             Jump(address);
                         }
                     ])
@@ -2987,7 +2988,7 @@ impl Convert for (usize, V7Operation) {
                             }
                             let target = halfwords*2.local_into();
                             target = target + Register("PC+");
-                            target = target<31:1> << 1.local_into();
+                            target = target & REMOVE_LAST_BIT_MASK.local_into();
                             Jump(target);
                     ])
                 }
