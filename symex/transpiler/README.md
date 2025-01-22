@@ -56,7 +56,7 @@ Instead of writing
 
 ```rust
 ret.push(Operation::Move {
-    destiation: rd.clone(),
+    destination: rd.clone(),
     source: rn.clone()
 });
 ```
@@ -78,7 +78,7 @@ Instead of writing
 ```rust
 if add {
     ret.push(Operation::Add {
-        destiation: rd.clone(),
+        destination: rd.clone(),
         operand1: rn.clone(),
         operand2: rm.clone()
     });

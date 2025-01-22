@@ -4,10 +4,11 @@ pub enum SolveFor {
     /// All paths.
     All,
 
-    /// Paths which return errors. Currently this is both internal executor errors and program errors.
+    /// Paths which return errors. Currently this is both internal executor
+    /// errors and program errors.
     Error,
 
-    /// Paths which are sucessful.
+    /// Paths which are successful.
     Success,
 }
 
@@ -19,7 +20,8 @@ pub struct RunConfig {
     /// If concretized inputs should be shown.
     pub solve_inputs: bool,
 
-    /// If concretized values should be displayed for variables passed to `symbolic`.
+    /// If concretized values should be displayed for variables passed to
+    /// `symbolic`.
     pub solve_symbolics: bool,
 
     /// If concretized output values should be shown.
@@ -29,8 +31,8 @@ pub struct RunConfig {
 impl RunConfig {
     /// Determine if the solver should be invoked this specific result.
     ///
-    /// Returns true of all paths should be solved, or if the result variant matches the given
-    /// `SolveFor`.
+    /// Returns true of all paths should be solved, or if the result variant
+    /// matches the given `SolveFor`.
     fn should_solve<T, E>(&self, result: &Result<T, E>) -> bool {
         use SolveFor::*;
         match self.solve_for {

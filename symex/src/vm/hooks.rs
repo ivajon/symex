@@ -150,7 +150,7 @@ pub fn symbolic(
                 .state
                 .memory
                 .get_object(addr)
-                .expect("coult not find object");
+                .expect("could not find object");
             obj.bit_size()
         };
 

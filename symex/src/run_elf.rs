@@ -81,7 +81,7 @@ fn add_architecture_independent_hooks<A: Arch>(cfg: &mut RunConfig<A>) {
 ///
 /// `path` is the path to the ELF
 /// file and `function` is the function the execution starts at.
-/// During runtime it will determin the target architecture and select the
+/// During runtime it will determine the target architecture and select the
 /// appropriate executor for that enviornement.
 ///
 /// # Panics

@@ -35,7 +35,7 @@ pub enum FunctionType {
     Hook(Hook),
 }
 
-pub enum Overriden {
+pub enum Overridden {
     Intrinsic(Intrinsic),
     Hook(Hook),
 }
@@ -127,7 +127,7 @@ impl Project {
         None
     }
 
-    pub fn get_function(&self, name: &CStr) -> Option<Overriden> {
+    pub fn get_function(&self, name: &CStr) -> Option<Overridden> {
         let name = name.to_string_lossy();
         // Demangle name when checking against user-defined hooks. The names in the IR
         // should all be mangled anyway.
@@ -139,19 +139,19 @@ impl Project {
         if is_intrinsic(&name) {
             if let Some(intrinsic) = self.intrinsics.get(&name) {
                 debug!("Resolved instrinsic: {name}");
-                return Some(Overriden::Intrinsic(*intrinsic));
+                return Some(Overridden::Intrinsic(*intrinsic));
             }
         }
 
         // Check for hooks.
         if let Some(hook) = self.hooks.get(&name) {
             debug!("Resolved hook: {name}");
-            return Some(Overriden::Hook(hook));
+            return Some(Overridden::Hook(hook));
         }
         for name in [&demangled_name, &demangled_name_no_hash] {
             if let Some(hook) = self.hooks.get(name) {
                 debug!("Resolved hook: {name}");
-                return Some(Overriden::Hook(hook));
+                return Some(Overridden::Hook(hook));
             }
         }
 

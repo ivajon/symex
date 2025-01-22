@@ -56,7 +56,7 @@ impl<T: std::fmt::Debug> TranspilerState<T> {
         None
     }
 
-    /// Increments the first occurance of that name.
+    /// Increments the first occurrence of that name.
     fn increment_access(&mut self, name: &String) {
         for scope in self.usage_counter.iter_mut() {
             if let Some(value) = scope.get_mut(name) {
@@ -65,7 +65,7 @@ impl<T: std::fmt::Debug> TranspilerState<T> {
         }
     }
 
-    // Exception since the naming is resonable in this case.
+    // Exception since the naming is reasonable in this case.
     #[allow(clippy::wrong_self_convention)]
     /// Returns the variables that need to be declared.
     ///

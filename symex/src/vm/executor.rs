@@ -20,7 +20,7 @@ use super::{
 use crate::{
     memory::to_bytes_u32,
     smt::{DContext, DExpr, SolverError},
-    vm::{Overriden, StackFrame},
+    vm::{Overridden, StackFrame},
 };
 
 pub struct LLVMExecutor<'vm> {
@@ -68,7 +68,7 @@ pub enum InstructionResult {
 
 pub enum ResolvedFunction {
     Function(Function),
-    Instrinic(Intrinsic),
+    Intrinsic(Intrinsic),
     Hook(Hook),
 }
 
@@ -135,12 +135,12 @@ impl<'vm> LLVMExecutor<'vm> {
                             let stack_frame = StackFrame::new_from_function(function, &arguments)?;
                             self.state.stack_frames.push(stack_frame);
                         }
-                        ResolvedFunction::Instrinic(_) | ResolvedFunction::Hook(_) => {
+                        ResolvedFunction::Intrinsic(_) | ResolvedFunction::Hook(_) => {
                             // For these we perform the entire function call at once, and handle the
                             // return. This is a bit of a special case.
                             let result = match function {
                                 ResolvedFunction::Function(_) => unreachable!(),
-                                ResolvedFunction::Instrinic(i) => i(self, &call.arguments),
+                                ResolvedFunction::Intrinsic(i) => i(self, &call.arguments),
                                 ResolvedFunction::Hook(i) => i(self, &call.arguments),
                             }?;
 
@@ -249,10 +249,10 @@ impl<'vm> LLVMExecutor<'vm> {
     /// Resolve a function address to a concrete function.
     fn resolve_function(&mut self, called_value: Value) -> Result<ResolvedFunction> {
         let fn_lookup = |function: Function| -> ResolvedFunction {
-            if let Some(overriden) = self.project.get_function(function.name()) {
-                match overriden {
-                    Overriden::Intrinsic(i) => ResolvedFunction::Instrinic(i),
-                    Overriden::Hook(h) => ResolvedFunction::Hook(h),
+            if let Some(overridden) = self.project.get_function(function.name()) {
+                match overridden {
+                    Overridden::Intrinsic(i) => ResolvedFunction::Intrinsic(i),
+                    Overridden::Hook(h) => ResolvedFunction::Hook(h),
                 }
             } else {
                 ResolvedFunction::Function(function)

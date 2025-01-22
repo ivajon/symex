@@ -152,7 +152,7 @@ impl Compile for Jump {
 
     fn compile(&self, state: &mut TranspilerState<Self::Output>) -> Result<Self::Output, Error> {
         let operand = self.target.clone().compile(state)?;
-        Ok(match self.condtion.clone() {
+        Ok(match self.condition.clone() {
             Some(condition) => {
                 quote!(Operation::ConditionalJump { destination: #operand,condition:#condition.clone() })
             }

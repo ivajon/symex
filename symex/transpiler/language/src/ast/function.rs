@@ -88,7 +88,7 @@ pub enum Intrinsic {
 }
 
 // ===============================================
-//              Defintion of intrinsics
+//              Definition of intrinsics
 // ===============================================
 
 #[derive(Debug, Clone)]
@@ -97,7 +97,7 @@ pub struct Jump {
     /// Where to jump to.
     pub target: Operand,
     /// What condition to use.
-    pub condtion: Option<Expr>,
+    pub condition: Option<Expr>,
 }
 
 #[derive(Debug, Clone)]
@@ -214,9 +214,9 @@ pub struct SetCFlag {
     pub operand1: Operand,
     /// The rhs of the operation.
     pub operand2: Operand,
-    /// Wether or not the operation was a subtract.
+    /// Whether or not the operation was a subtract.
     pub sub: Lit,
-    /// Wether or not the operation used the carry flag.
+    /// Whether or not the operation used the carry flag.
     pub carry: Lit,
 }
 
@@ -227,9 +227,9 @@ pub struct SetVFlag {
     pub operand1: Operand,
     /// The rhs of the operation.
     pub operand2: Operand,
-    /// Wether or not the operation was a subtract.
+    /// Whether or not the operation was a subtract.
     pub sub: Lit,
-    /// Wether or not the operation used the carry flag.
+    /// Whether or not the operation used the carry flag.
     pub carry: Lit,
 }
 

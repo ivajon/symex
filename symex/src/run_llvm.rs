@@ -53,7 +53,7 @@ pub enum SolveFor {
     /// errors and program errors.
     Error,
 
-    /// Paths which are sucessful.
+    /// Paths which are successful.
     Success,
 }
 

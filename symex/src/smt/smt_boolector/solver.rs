@@ -169,7 +169,7 @@ impl BoolectorIncrementalSolver {
         }
     }
 
-    // TODO: Commpare this against the other... Not sure why there are two.
+    // TODO: Compare this against the other... Not sure why there are two.
     fn get_solutions(
         &self,
         expr: &BoolectorExpr,

@@ -20,7 +20,7 @@ use crate::{memory::MemoryError, smt::SolverError};
 ///
 /// These errors are not related to the VM/Executor, but to the analysis itself.
 /// The error path of a `Result` will never contain an `AnalysisError`, those
-/// are reservered for errors related to the execution of the VM/Executor.
+/// are reserved for errors related to the execution of the VM/Executor.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AnalysisError {
     // CallDepthExceeded,
@@ -71,7 +71,7 @@ pub enum LLVMExecutorError {
 
 // /// Errors why a certain path failed.
 // ///
-// /// Indiviual errors from the specific VM/Executors should be converted to
+// /// Individual errors from the specific VM/Executors should be converted to
 // this more general error #[derive(Debug, thiserror::Error, PartialEq)]
 // pub enum VMError {
 //     #[error("{}", UNEXPECTED_PARAMETER_MESSAGE)]

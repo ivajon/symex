@@ -13,10 +13,10 @@ use crate::{ast::*, Compile, Error, TranspilerState};
 
 impl From<IR> for Result<TokenStream, Error> {
     fn from(value: IR) -> Result<TokenStream, Error> {
-        // let mut declerations: Vec<TokenStream> = vec![];
+        // let mut declarations: Vec<TokenStream> = vec![];
         // self.extensions
         //     .iter()
-        //     .for_each(|el| el.declare(&mut declerations));
+        //     .for_each(|el| el.declare(&mut declarations));
         let mut state = TranspilerState::new();
         state.enter_scope();
 
@@ -26,19 +26,19 @@ impl From<IR> for Result<TokenStream, Error> {
         for el in value.extensions {
             ext.push((ret.clone(), el).compile(&mut state)?);
         }
-        let declerations = state.to_declare()?;
-        let declaration_strings = declerations.iter().map(|el| el.to_string());
+        let declarations = state.to_declare()?;
+        let declaration_strings = declarations.iter().map(|el| el.to_string());
         state.to_declare()?;
         Ok(match value.ret {
             Some(_) => quote!(
-                #(let #declerations =
+                #(let #declarations =
                   Operand::Local(#declaration_strings.to_owned());)*
                 #(#ext;)*
             ),
             None => quote!(
                 {
                     let mut ret =  Vec::new();
-                    #(let #declerations =
+                    #(let #declarations =
                       Operand::Local(#declaration_strings.to_owned());)*
                     #(#ext;)*
                     ret
@@ -154,12 +154,12 @@ impl Compile for (Ident, Statement) {
                     ext.push(el.compile(state)?);
                 }
                 let ret = self.0.clone();
-                let declerations: Vec<Ident> =
+                let declarations: Vec<Ident> =
                     state.to_declare.last_mut().unwrap().drain(..).collect();
                 let to_insert_above: Vec<TokenStream> = state.to_insert_above.drain(..).collect();
-                let declaration_strings = declerations.iter().map(|el| el.to_string());
+                let declaration_strings = declarations.iter().map(|el| el.to_string());
                 Ok(quote!(
-                #(let #declerations =
+                #(let #declarations =
                     Operand::Local(#declaration_strings.to_owned());)*
                 #ret.extend([
                     #(#to_insert_above,)*

@@ -42,7 +42,7 @@ pub enum ExprOperand {
 /// A (possibly) new identifier.
 #[derive(Debug, Clone)]
 pub struct IdentOperand {
-    /// Wether or not to insert this in to the local scope or not
+    /// Whether or not to insert this in to the local scope or not
     pub define: bool,
     /// The identifier used
     pub ident: Ident,

@@ -30,7 +30,7 @@ pub struct ArrayMemory {
     /// The actual memory. Stores all values written to memory.
     memory: DArray,
 
-    /// Memory endianess
+    /// Memory endianness
     endianness: Endianness,
 }
 

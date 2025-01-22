@@ -27,7 +27,7 @@ impl IR {
 
                     let token: Ident = input.parse()?;
                     if token.to_string().as_str() != "extend" {
-                        return Err(input.error("Exptected extend"));
+                        return Err(input.error("Expected extend"));
                     }
                     Some(ret)
                 }

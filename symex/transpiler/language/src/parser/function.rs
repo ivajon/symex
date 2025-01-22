@@ -170,7 +170,7 @@ impl Parse for Jump {
             }
             Ok(Self {
                 target,
-                condtion: Some(conditions),
+                condition: Some(conditions),
             })
         } else {
             // if !content.is_empty() {
@@ -178,7 +178,7 @@ impl Parse for Jump {
             // }
             Ok(Self {
                 target,
-                condtion: None,
+                condition: None,
             })
         }
     }
@@ -196,7 +196,7 @@ impl Parse for LocalAddress {
         syn::parenthesized!(content in input);
 
         let name: Lit = match content.peek(Ident) {
-            // If name is an identifier, we conver the identifer to a string
+            // If name is an identifier, we convert the identifier to a string
             true => {
                 let ident: Ident = content.parse()?;
                 Lit::Str(LitStr::new(&ident.to_string(), ident.span()))
@@ -226,7 +226,7 @@ impl Parse for Register {
         syn::parenthesized!(content in input);
 
         let name: Lit = match content.peek(Ident) {
-            // If name is an identifier, we conver the identifer to a string
+            // If name is an identifier, we convert the identifier to a string
             true => {
                 let ident: Ident = content.parse()?;
                 Lit::Str(LitStr::new(&ident.to_string(), ident.span()))
@@ -252,7 +252,7 @@ impl Parse for Flag {
         syn::parenthesized!(content in input);
 
         let name: Lit = match content.peek(Ident) {
-            // If name is an identifier, we conver the identifer to a string
+            // If name is an identifier, we convert the identifier to a string
             true => {
                 let ident: Ident = content.parse()?;
                 Lit::Str(LitStr::new(&ident.to_string(), ident.span()))
