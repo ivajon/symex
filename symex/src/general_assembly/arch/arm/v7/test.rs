@@ -71,8 +71,8 @@ macro_rules! test {
 
             $(== $eq_rhs:literal)?
             $(!= $neq_rhs:literal)?
-            $(== ($eq_rhs_expr:expr))?
-            $(!= ($neq_rhs_expr:expr))?
+            $(== ($eq_rhs_expr:expr_2021))?
+            $(!= ($neq_rhs_expr:expr_2021))?
         ),*
     }) => {
         $(
@@ -127,7 +127,7 @@ macro_rules! initiate {
                 address ($address:literal,$width:literal)
             )?
 
-            = $eq_value:expr
+            = $eq_value:expr_2021
         );*
     }) => {
         $(
