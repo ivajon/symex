@@ -54,7 +54,7 @@ pub struct Project {
     /// User defined hooks.
     hooks: Hooks,
 
-    /// LLVM Instrinsics.
+    /// LLVM Intrinsics.
     intrinsics: Intrinsics,
 }
 
@@ -138,7 +138,7 @@ impl Project {
         // Check for intrinsic.
         if is_intrinsic(&name) {
             if let Some(intrinsic) = self.intrinsics.get(&name) {
-                debug!("Resolved instrinsic: {name}");
+                debug!("Resolved intrinsic: {name}");
                 return Some(Overridden::Intrinsic(*intrinsic));
             }
         }

@@ -181,7 +181,7 @@ pub fn llvm_memset(vm: &mut LLVMExecutor<'_>, args: &[Value]) -> Result<PathResu
     Ok(PathResult::Success(None))
 }
 
-/// Intrisic to move memory from source to destination.
+/// Intrinsic to move memory from source to destination.
 ///
 /// Similar to `llvm_memcpy` but `llvm_memmove` allows the two memory locations
 /// to overlap.
