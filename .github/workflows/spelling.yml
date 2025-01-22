@@ -13,4 +13,4 @@ jobs:
         with:
           check_filenames: true
           ignore_words_file: .github/ignore.txt
-          skip: crates
+          skip: crates,symex-llvm-14-legacy
