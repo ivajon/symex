@@ -91,7 +91,7 @@ For usage instructions see `cargo symex --help`.
 
 ### Getting started
 
-Check out the examples contained in `examles/examples`. These can be run with the cargo subcommand
+Check out the examples contained in `examples/examples`. These can be run with the cargo subcommand
 
 ```shell
 > cd examples
