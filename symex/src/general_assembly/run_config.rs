@@ -62,6 +62,20 @@ pub struct RunConfig<A: Arch> {
     pub memory_read_hooks: Vec<(MemoryHookAddress, MemoryReadHook<A>)>,
 }
 
+impl<A: Arch> RunConfig<A> {
+    /// Creates a new [`RunConfig`] that optionally shows the path results.
+    pub const fn new(show_path_results: bool) -> Self {
+        Self {
+            show_path_results,
+            pc_hooks: vec![],
+            register_read_hooks: vec![],
+            register_write_hooks: vec![],
+            memory_write_hooks: vec![],
+            memory_read_hooks: vec![],
+        }
+    }
+}
+
 impl<A: Arch> Default for RunConfig<A> {
     fn default() -> Self {
         Self {

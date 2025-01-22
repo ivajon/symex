@@ -1,7 +1,6 @@
-//! Simple runner that starts symbolic execution on LLVM bitcode.
+//! Simple runner that starts symbolic execution on machine code.
 use std::{fs, path::Path, time::Instant};
 
-use object::{Architecture, Object};
 use regex::Regex;
 use tracing::{debug, trace};
 
@@ -9,10 +8,7 @@ use crate::{
     elf_util::{ErrorReason, PathStatus, VisualPathResult},
     general_assembly::{
         self,
-        arch::{
-            arm::{v6::ArmV6M, v7::ArmV7EM},
-            Arch,
-        },
+        arch::{Arch, SupportedArchitechture},
         executor::PathResult,
         project::{PCHook, ProjectError},
         state::GAState,
@@ -107,62 +103,40 @@ pub fn run_elf<P: AsRef<Path>>(
         }
     };
 
-    let architecture = obj_file.architecture();
+    let arch = SupportedArchitechture::discover(&obj_file)?;
 
-    match architecture {
-        Architecture::Arm => {
+    // TODO: Look in to other options for dispatching these without dynamic
+    // dispatch..
+    match arch {
+        SupportedArchitechture::ArmV7EM(v7) => {
             // Run the paths with architecture specific data.
-            if let Some(v7) = ArmV7EM::discover(&obj_file)? {
-                let mut cfg = RunConfig {
-                    show_path_results,
-                    pc_hooks: Vec::new(),
-                    register_read_hooks: Vec::new(),
-                    register_write_hooks: Vec::new(),
-                    memory_write_hooks: Vec::new(),
-                    memory_read_hooks: Vec::new(),
-                };
+            let mut cfg = RunConfig::new(show_path_results);
+            add_architecture_independent_hooks(&mut cfg);
+            let project = Box::new(general_assembly::project::Project::from_path(
+                &mut cfg, obj_file, &v7,
+            )?);
+            let project = Box::leak(project);
+            project.add_pc_hook(end_pc, PCHook::EndSuccess);
+            debug!("Created project: {:?}", project);
 
-                cfg.show_path_results = show_path_results;
+            let mut vm = general_assembly::vm::VM::new(project, context, function, end_pc, v7)?;
 
-                add_architecture_independent_hooks(&mut cfg);
-                let project = Box::new(general_assembly::project::Project::from_path(
-                    &mut cfg, obj_file, &v7,
-                )?);
-                let project = Box::leak(project);
-                project.add_pc_hook(end_pc, PCHook::EndSuccess);
-                debug!("Created project: {:?}", project);
-
-                let mut vm = general_assembly::vm::VM::new(project, context, function, end_pc, v7)?;
-
-                return run_elf_paths(&mut vm, &cfg);
-            } else if let Some(v6) = ArmV6M::discover(&obj_file)? {
-                let mut cfg = RunConfig {
-                    show_path_results,
-                    pc_hooks: Vec::new(),
-                    register_read_hooks: Vec::new(),
-                    register_write_hooks: Vec::new(),
-                    memory_write_hooks: Vec::new(),
-                    memory_read_hooks: Vec::new(),
-                };
-
-                add_architecture_independent_hooks(&mut cfg);
-                let project = Box::new(general_assembly::project::Project::from_path(
-                    &mut cfg, obj_file, &v6,
-                )?);
-                let project = Box::leak(project);
-                project.add_pc_hook(end_pc, PCHook::EndSuccess);
-                debug!("Created project: {:?}", project);
-
-                let mut vm = general_assembly::vm::VM::new(project, context, function, end_pc, v6)?;
-                return run_elf_paths(&mut vm, &cfg);
-            }
+            run_elf_paths(&mut vm, &cfg)
         }
-        _ => todo!(),
-    }
+        SupportedArchitechture::ArmV6M(v6) => {
+            let mut cfg = RunConfig::new(show_path_results);
+            add_architecture_independent_hooks(&mut cfg);
+            let project = Box::new(general_assembly::project::Project::from_path(
+                &mut cfg, obj_file, &v6,
+            )?);
+            let project = Box::leak(project);
+            project.add_pc_hook(end_pc, PCHook::EndSuccess);
+            debug!("Created project: {:?}", project);
 
-    Err(ProjectError::UnableToParseElf(
-        "UnsuportedArchitechture".to_string(),
-    ))?
+            let mut vm = general_assembly::vm::VM::new(project, context, function, end_pc, v6)?;
+            run_elf_paths(&mut vm, &cfg)
+        }
+    }
 }
 
 /// Run symbolic execution on a elf file where `path` is the path to the ELF

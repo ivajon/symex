@@ -7,16 +7,20 @@
 //! architecture specific hooks.
 
 pub mod arm;
-use std::{
-    collections::HashSet,
-    fmt::{Debug, Display},
-};
+/// Defines discovery behaviour for the architechtures.
+pub mod discover;
+use std::fmt::{Debug, Display};
 
 use arm::{v6::ArmV6M, v7::ArmV7EM};
 use object::File;
 use thiserror::Error;
 
 use crate::general_assembly::{instruction::Instruction, state::GAState, RunConfig};
+
+pub enum SupportedArchitechture {
+    ArmV7EM(ArmV7EM),
+    ArmV6M(ArmV6M),
+}
 
 #[derive(Debug, Eq, PartialEq, PartialOrd, Clone, Error)]
 /// General architecture related errors.
@@ -98,8 +102,4 @@ pub trait Arch: Debug + Display + Clone + Sized + 'static {
     /// Returns an instance of self if the file is defined for this
     /// specific architecture.
     fn discover(file: &File) -> Result<Option<Self>, ArchError>;
-
-    fn get_stack_pointers(&self) -> Option<HashSet<u64>> {
-        None
-    }
 }

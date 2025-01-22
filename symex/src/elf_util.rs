@@ -1,7 +1,7 @@
 //! Utility structures mostly related to passing information to runner and
 //! display to user.
 use core::fmt::{self, Write};
-use std::{collections::HashSet, iter::Peekable};
+use std::iter::Peekable;
 
 use colored::*;
 use indenter::indented;
@@ -43,9 +43,6 @@ pub struct VisualPathResult {
 
     /// cycle counts at marked events
     pub cycle_laps: Vec<(usize, String)>,
-
-    /// All of the stack pointer writes.
-    pub stack_usage: Option<HashSet<u64>>,
 
     /// The initial stack pointer for this path.
     pub initial_sp: u64,
@@ -90,7 +87,6 @@ impl VisualPathResult {
 
         Ok(VisualPathResult {
             path: path_num,
-            stack_usage: state.architecture.get_stack_pointers(),
             result,
             symbolics,
             end_state,
@@ -153,11 +149,6 @@ impl fmt::Display for VisualPathResult {
         writeln!(f, "Instructions executed: {}", self.instruction_count)?;
 
         writeln!(f, "Max number of cycles: {}", self.max_cycles)?;
-
-        if let Some(stack) = &self.stack_usage {
-            let min = stack.iter().min().unwrap_or(&self.initial_sp);
-            writeln!(f, "Stack usage: {} bytes", self.initial_sp - min)?;
-        }
 
         Ok(())
     }

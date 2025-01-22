@@ -1,11 +1,11 @@
-use std::{collections::HashSet, fmt::Display};
+use std::fmt::Display;
 
 use decoder::Convert;
 use disarmv7::prelude::{Operation as V7Operation, *};
 use general_assembly::operation::Operation;
 use object::{File, Object};
 use regex::Regex;
-use tracing::{trace, warn};
+use tracing::trace;
 
 use super::{arm_isa, ArmIsa};
 use crate::{
@@ -28,9 +28,7 @@ pub mod timing;
 
 /// Type level denotation for the Armv7-EM ISA.
 #[derive(Debug, Default, Clone)]
-pub struct ArmV7EM {
-    pub pc_writes: HashSet<u64>,
-}
+pub struct ArmV7EM {}
 
 impl Arch for ArmV7EM {
     fn add_hooks(&self, cfg: &mut RunConfig<Self>) {
@@ -88,15 +86,6 @@ impl Arch for ArmV7EM {
             )?;
             let sp = state.get_register("SP".to_owned()).unwrap();
             let sp = sp.simplify();
-            let ret = sp.get_constant();
-            if ret.is_none() {
-                warn!("Could not get static version of sp = {:?}", value);
-                return state.set_register("SP".to_owned(), sp);
-            }
-            let value = unsafe { ret.unwrap_unchecked() };
-
-            trace!("Wrote {value} to SP");
-            state.architecture.pc_writes.insert(value);
             state.set_register("SP".to_owned(), sp)
         };
 
@@ -148,10 +137,6 @@ impl Arch for ArmV7EM {
             ArmIsa::ArmV6M => Ok(None),
             ArmIsa::ArmV7EM => Ok(Some(ArmV7EM::default())),
         }
-    }
-
-    fn get_stack_pointers(&self) -> Option<HashSet<u64>> {
-        Some(self.pc_writes.clone())
     }
 }
 
