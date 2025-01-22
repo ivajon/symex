@@ -9,8 +9,8 @@ use crate::smt::DExpr;
 
 /// Result for a single path of execution.
 ///
-/// This contains which path it was, if it succeded or not. If it failed the
-/// error will have a stack trace to where the error occured.
+/// This contains which path it was, if it succeeded or not. If it failed the
+/// error will have a stack trace to where the error occurred.
 ///
 /// All input variables and variables used in `symbolic` calls will also have
 /// solutions available.
@@ -21,7 +21,7 @@ pub struct VisualPathResult {
 
     /// The final value from the path.
     ///
-    /// If the path failed the reason vill be in the error. Otherwise there will
+    /// If the path failed the reason will be in the error. Otherwise there will
     /// be a value unless the analyzed function returned void.
     pub result: PathStatus,
 
@@ -101,8 +101,8 @@ pub enum PathStatus {
 
 /// Detailed description of why a run failed.
 ///
-/// Contains the error message, where the error happend and the stack trace from
-/// the point of failure.
+/// Contains the error message, where the error happened and the stack trace
+/// from the point of failure.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ErrorReason {
     /// Error message from the received error.

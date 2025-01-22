@@ -24,9 +24,6 @@ pub struct Settings {
 
     /// Build in release.
     pub release: bool,
-
-    /// If bitcode should be embedded.
-    pub embed_bitcode: bool,
 }
 
 impl Settings {

@@ -1,21 +1,21 @@
-use super::state::GAState;
+use super::{arch::Arch, state::GAState};
 use crate::smt::DExpr;
 
 #[derive(Debug, Clone)]
-pub struct Path {
+pub struct Path<A: Arch> {
     /// The state to use when resuming execution.
     ///
     /// The location in the state should be where to resume execution at.
-    pub state: GAState,
+    pub state: GAState<A>,
 
     /// Constraints to add before starting execution on this path.
     pub constraints: Vec<DExpr>,
 }
 
-impl Path {
+impl<A: Arch> Path<A> {
     /// Creates a new path starting at a certain state, optionally asserting a
     /// condition on the created path.
-    pub fn new(state: GAState, constraint: Option<DExpr>) -> Self {
+    pub fn new(state: GAState<A>, constraint: Option<DExpr>) -> Self {
         let constraints = match constraint {
             Some(c) => vec![c],
             None => vec![],
@@ -30,24 +30,24 @@ impl Path {
 /// Each path is explored for as long as possible, when a path finishes the most
 /// recently added path is the next to be run.
 #[derive(Debug, Clone)]
-pub struct DFSPathSelection {
-    paths: Vec<Path>,
+pub struct DFSPathSelection<A: Arch> {
+    paths: Vec<Path<A>>,
 }
 
-impl DFSPathSelection {
+impl<A: Arch> DFSPathSelection<A> {
     /// Creates new without any stored paths.
     pub fn new() -> Self {
         Self { paths: Vec::new() }
     }
 
     /// Add a new path to be explored.
-    pub fn save_path(&mut self, path: Path) {
+    pub fn save_path(&mut self, path: Path<A>) {
         path.state.constraints.push();
         self.paths.push(path);
     }
 
     /// Retrieve the next path to explore.
-    pub fn get_path(&mut self) -> Option<Path> {
+    pub fn get_path(&mut self) -> Option<Path<A>> {
         match self.paths.pop() {
             Some(path) => {
                 path.state.constraints.pop();

@@ -2,11 +2,12 @@
 
 use armv6_m_instruction_parser::{instructons::Operation, registers::Register};
 
+use super::ArmV6M;
 use crate::general_assembly::{instruction::CycleCount, state::GAState};
 
-pub(crate) fn cycle_count_m0plus_core(operation: &Operation) -> CycleCount {
+pub(crate) fn cycle_count_m0plus_core(operation: &Operation) -> CycleCount<ArmV6M> {
     // SIO based on the rp2040 make this configurable later
-    let address_max_cycle_function: fn(state: &GAState) -> usize = |state| {
+    let address_max_cycle_function: fn(state: &GAState<ArmV6M>) -> usize = |state| {
         let address = match state.registers.get("LastAddr").unwrap().get_constant() {
             Some(v) => v,
             None => return 2,
@@ -32,7 +33,7 @@ pub(crate) fn cycle_count_m0plus_core(operation: &Operation) -> CycleCount {
         Operation::ASRImm { imm: _, m: _, d: _ } => CycleCount::Value(1),
         Operation::ASRReg { m: _, dn: _ } => CycleCount::Value(1),
         Operation::B { cond: _, imm: _ } => {
-            let max_cycle: fn(state: &GAState) -> usize = |state| {
+            let max_cycle: fn(state: &GAState<ArmV6M>) -> usize = |state| {
                 if state.get_has_jumped() {
                     2
                 } else {
@@ -153,7 +154,7 @@ pub(crate) fn cycle_count_m0plus_core(operation: &Operation) -> CycleCount {
 }
 
 #[allow(dead_code)]
-pub(crate) fn cycle_count_m0_core(operation: &Operation) -> CycleCount {
+pub(crate) fn cycle_count_m0_core(operation: &Operation) -> CycleCount<ArmV6M> {
     match operation {
         Operation::ADCReg { m: _, n: _, d: _ } => CycleCount::Value(1),
         Operation::ADDImm { imm: _, n: _, d: _ } => CycleCount::Value(1),
@@ -168,7 +169,7 @@ pub(crate) fn cycle_count_m0_core(operation: &Operation) -> CycleCount {
         Operation::ASRImm { imm: _, m: _, d: _ } => CycleCount::Value(1),
         Operation::ASRReg { m: _, dn: _ } => CycleCount::Value(1),
         Operation::B { cond: _, imm: _ } => {
-            let max_cycle: fn(state: &GAState) -> usize = |state| {
+            let max_cycle: fn(state: &GAState<ArmV6M>) -> usize = |state| {
                 if state.get_has_jumped() {
                     3
                 } else {

@@ -1,5 +1,4 @@
 //! Simple runner that starts symbolic execution on LLVM bitcode.
-//!
 use std::{
     path::Path,
     time::{Duration, Instant},
@@ -54,7 +53,7 @@ pub enum SolveFor {
     /// errors and program errors.
     Error,
 
-    /// Paths which are sucessful.
+    /// Paths which are successful.
     Success,
 }
 

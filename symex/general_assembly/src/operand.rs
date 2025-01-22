@@ -40,7 +40,7 @@ pub enum Operand {
     Register(String),
 
     /// Representing an immediate value.
-    Immidiate(DataWord),
+    Immediate(DataWord),
 
     /// Representing the value stored in memory
     /// at the address stored in a local.

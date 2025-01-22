@@ -45,6 +45,7 @@ pub fn assume(condition: bool) {
 /// # Example
 /// ```rust
 /// # use symex_lib::symbolic;
+/// # use symex_lib::suppress_path;
 /// # fn foo() {
 /// #   let mut x = 0;
 /// #   symbolic(&mut x);

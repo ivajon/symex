@@ -46,14 +46,14 @@ impl BoolectorExpr {
 
     /// [Expression] equality check. Both [Expression]s must have the same bit
     /// width, the result is returned as an [Expression] of width `1`.
-    pub fn _eq(&self, other: &Self) -> Self {
+    pub fn eq(&self, other: &Self) -> Self {
         assert_eq!(self.len(), other.len());
         Self(self.0._eq(&other.0))
     }
 
     /// [Expression] inequality check. Both [Expression]s must have the same bit
     /// width, the result is returned as an [Expression] of width `1`.
-    pub fn _ne(&self, other: &Self) -> Self {
+    pub fn ne(&self, other: &Self) -> Self {
         assert_eq!(self.len(), other.len());
         Self(self.0._ne(&other.0))
     }

@@ -1,19 +1,20 @@
 //! Utility structures mostly related to passing information to runner and
 //! display to user.
 use core::fmt::{self, Write};
+use std::iter::Peekable;
 
 use colored::*;
 use indenter::indented;
 
 use crate::{
-    general_assembly::{state::GAState, GAError},
+    general_assembly::{arch::Arch, state::GAState, GAError},
     smt::DExpr,
 };
 
 /// Result for a single path of execution.
 ///
-/// This contains which path it was, if it succeded or not. If it failed the
-/// error will have a stack trace to where the error occured.
+/// This contains which path it was, if it succeeded or not. If it failed the
+/// error will have a stack trace to where the error occurred.
 ///
 /// All input variables and variables used in `symbolic` calls will also have
 /// solutions available.
@@ -24,7 +25,7 @@ pub struct VisualPathResult {
 
     /// The final value from the path.
     ///
-    /// If the path failed the reason vill be in the error. Otherwise there will
+    /// If the path failed the reason will be in the error. Otherwise there will
     /// be a value unless the analyzed function returned void.
     pub result: PathStatus,
 
@@ -42,9 +43,12 @@ pub struct VisualPathResult {
 
     /// cycle counts at marked events
     pub cycle_laps: Vec<(usize, String)>,
+
+    /// The initial stack pointer for this path.
+    pub initial_sp: u64,
 }
 
-fn elf_get_values<'a, I>(vars: I, state: &GAState) -> Result<Vec<Variable>, GAError>
+fn elf_get_values<'a, I>(vars: I, state: &GAState<impl Arch>) -> Result<Vec<Variable>, GAError>
 where
     I: Iterator<Item = &'a Variable>,
 {
@@ -65,7 +69,7 @@ where
 impl VisualPathResult {
     /// Creates a result from a state.
     pub fn from_state(
-        state: GAState,
+        state: GAState<impl Arch>,
         path_num: usize,
         result: PathStatus,
     ) -> Result<Self, GAError> {
@@ -87,6 +91,7 @@ impl VisualPathResult {
             symbolics,
             end_state,
             instruction_count: state.get_instruction_count(),
+            initial_sp: state.inital_sp,
             max_cycles: state.cycle_count,
             cycle_laps: state.cycle_laps.clone(),
         })
@@ -115,25 +120,29 @@ impl fmt::Display for VisualPathResult {
 
         if !self.symbolics.is_empty() {
             writeln!(f, "\nSymbolic:")?;
-            for value in self.symbolics.iter() {
-                let name = if let Some(name) = value.name.as_ref() {
-                    name
-                } else {
-                    "_"
-                };
-                writeln!(indented(f), "{name}: {}", value)?;
+            let state = self.symbolics.clone();
+            let mut state: Vec<_> = state
+                .iter()
+                .map(|el| (el.name.clone().unwrap_or("_".to_string()).clone(), el))
+                .collect();
+            state.sort_by(|a, b| sort_respect_numbers(&a.0, &b.0));
+
+            for (name, value) in state.iter() {
+                writeln!(indented(f), "{name}: {value}")?;
             }
         }
 
         if !self.end_state.is_empty() {
             writeln!(f, "\nEnd state:")?;
-            for value in self.end_state.iter() {
-                let name = if let Some(name) = value.name.as_ref() {
-                    name
-                } else {
-                    "_"
-                };
-                writeln!(indented(f), "{name}: {}", value)?;
+            let state = self.end_state.clone();
+            let mut state: Vec<_> = state
+                .iter()
+                .map(|el| (el.name.clone().unwrap_or("_".to_string()).clone(), el))
+                .collect();
+            state.sort_by(|a, b| sort_respect_numbers(&a.0, &b.0));
+
+            for (name, value) in state.iter() {
+                writeln!(indented(f), "{name}: {value}")?;
             }
         }
 
@@ -161,8 +170,8 @@ pub enum PathStatus {
 
 /// Detailed description of why a run failed.
 ///
-/// Contains the error message, where the error happend and the stack trace from
-/// the point of failure.
+/// Contains the error message, where the error happened and the stack trace
+/// from the point of failure.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ErrorReason {
     /// Error message from the received error.
@@ -311,7 +320,7 @@ enum TypedVariable<'a> {
     Struct(Vec<TypedVariable<'a>>),
 }
 
-impl<'a> fmt::Display for TypedVariable<'a> {
+impl fmt::Display for TypedVariable<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use TypedVariable::*;
 
@@ -382,6 +391,87 @@ impl<'a> fmt::Display for TypedVariable<'a> {
     }
 }
 
+/// Returns the order of two strings in alphabetical order while respecting full
+/// numeric values.
+fn sort_respect_numbers(a: &str, b: &str) -> std::cmp::Ordering {
+    let mut a = Tokenizer {
+        iter: a.chars().peekable(),
+    };
+    let mut b = Tokenizer {
+        iter: b.chars().peekable(),
+    };
+
+    let first_a = a.next();
+    let first_b = b.next();
+    let initial = match (first_a, first_b) {
+        (Some(a), Some(b)) => a.cmp(&b),
+        (Some(_a), _) => return std::cmp::Ordering::Greater,
+        (_, Some(_b)) => return std::cmp::Ordering::Less,
+        (_, _) => return std::cmp::Ordering::Equal,
+    };
+    if initial != std::cmp::Ordering::Equal {
+        return initial;
+    }
+    for (a, b) in a.zip(b) {
+        let c = a.cmp(&b);
+        if c != std::cmp::Ordering::Equal {
+            return c;
+        }
+    }
+
+    initial
+}
+
+struct Tokenizer<I: Iterator<Item = char>> {
+    iter: Peekable<I>,
+}
+
+#[derive(Debug)]
+enum Token {
+    Char(char),
+    Number(u32),
+}
+
+impl Token {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self, other) {
+            (Self::Char(c1), Self::Char(c2)) => c1.cmp(c2),
+            (Self::Number(n1), Self::Number(n2)) => n1.cmp(n2),
+            (Self::Number(_), Self::Char(_)) => std::cmp::Ordering::Less,
+            (Self::Char(_), _) => std::cmp::Ordering::Greater,
+        }
+    }
+}
+
+impl<I: Iterator<Item = char>> Tokenizer<I> {
+    fn scan(&mut self) -> Option<Token> {
+        let mut next = self.iter.peek()?;
+        let mut accumulator = None;
+        while next.is_numeric() {
+            accumulator = Some(
+                accumulator.unwrap_or(0) * 10 + unsafe { next.to_digit(10).unwrap_unchecked() },
+            );
+            let _ = self.iter.next();
+            next = match self.iter.peek() {
+                Some(val) => val,
+                None => break,
+            };
+        }
+        if let Some(num) = accumulator {
+            return Some(Token::Number(num));
+        }
+        let token = self.iter.next()?;
+        Some(Token::Char(token))
+    }
+}
+
+impl<I: Iterator<Item = char>> Iterator for Tokenizer<I> {
+    type Item = Token;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.scan()
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::TypedVariable;

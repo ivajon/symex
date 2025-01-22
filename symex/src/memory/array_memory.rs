@@ -30,7 +30,7 @@ pub struct ArrayMemory {
     /// The actual memory. Stores all values written to memory.
     memory: DArray,
 
-    /// Memory endianess
+    /// Memory endianness
     endianness: Endianness,
 }
 
@@ -78,7 +78,7 @@ impl ArrayMemory {
 
     /// Writes an u8 value to the given address.
     fn write_u8(&mut self, addr: &DExpr, val: DExpr) {
-        self.memory.write(addr, val);
+        self.memory.write(addr, &val);
     }
 
     /// Reads `bits` from `addr.

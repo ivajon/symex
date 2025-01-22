@@ -17,7 +17,7 @@ use disarmv7::prelude::{
 };
 
 macro_rules! consume {
-    (($($id:ident$($(.$e:expr)+)?),*) from $name:ident) => {
+    (($($id:ident$($(.$e:expr_2021)+)?),*) from $name:ident) => {
         #[allow(unused_parens)]
         let ($($id),*) = {
             paste!(
@@ -100,9 +100,12 @@ macro_rules! local {
 }
 
 
+/// Simply forces the least significant bit to zero.
+const REMOVE_LAST_BIT_MASK:u32 = !0b1;
 pub trait Convert {
     fn convert(self,in_it_block:bool) -> Vec<Operation>;
 }
+
 impl Convert for (usize, V7Operation) {
     fn convert(self,in_it_block:bool) -> Vec<Operation> {
         'outer_block: {
@@ -209,7 +212,7 @@ impl Convert for (usize, V7Operation) {
                     pseudo!(ret.extend[
                         let result = shifted + rn;
                         if (should_jump) {
-                            result = result<31:1> << 1.local_into();
+                            result = result & REMOVE_LAST_BIT_MASK.local_into();
                             Jump(result);
                         } else {
                             if (s) {
@@ -400,7 +403,7 @@ impl Convert for (usize, V7Operation) {
                     let (condition, imm) = (condition.local_into(), imm.local_into());
                     pseudo!([
                         let target = Register("PC+") + imm;
-                        target = target<31:1> << 1.local_into();
+                        target = target & REMOVE_LAST_BIT_MASK.local_into();
                         Jump(target,condition);
                     ])
                 }
@@ -412,7 +415,7 @@ impl Convert for (usize, V7Operation) {
                         Operation::And { 
                             destination: rd.clone(), 
                             operand1: rd,
-                            operand2: Operand::Immidiate(DataWord::Word32(mask)) 
+                            operand2: Operand::Immediate(DataWord::Word32(mask)) 
                         }
                     ]
                 }
@@ -420,14 +423,13 @@ impl Convert for (usize, V7Operation) {
                     consume!((rd,rn,lsb,msb) from bfi);
                     let (rd, rn) = (rd.local_into(), rn.local_into());
                     let diff = msb - lsb;
-                    assert!(msb >= lsb);
+                    let nmask = (!(mask_dyn(lsb,msb) << lsb)).local_into();
+                    assert!(msb >= lsb, "would be unpredictable");
                     pseudo!([
                         // Assume happy case here
-                        let mask = ((diff - 1) << lsb).local_into();
-                        mask = ! mask;
-                        rd = rd & mask;
+                        rd = rd & nmask;
                         let intermediate = rn<diff:0> << lsb.local_into();
-                        rd = rd | intermediate;
+                        rd |= intermediate;
                     ])
                 }
                 V7Operation::BicImmediate(bic) => {
@@ -493,10 +495,10 @@ impl Convert for (usize, V7Operation) {
                     
                     pseudo!([
                             let next_instr_addr = Register("PC+");
-                            Register("LR") = next_instr_addr<31:1> << 1.local_into();
+                            Register("LR") = next_instr_addr & REMOVE_LAST_BIT_MASK.local_into();
                             Register("LR") |= 0b1.local_into();
                             next_instr_addr = Register("PC+") + imm;
-                            next_instr_addr = next_instr_addr<31:1> << 1.local_into();
+                            next_instr_addr = next_instr_addr & REMOVE_LAST_BIT_MASK.local_into();
                             Register("PC+") = next_instr_addr;
                     ])
                 }
@@ -507,10 +509,10 @@ impl Convert for (usize, V7Operation) {
                         let target = rm;
                         let next_instr_addr = Register("PC+") - 2.local_into();
 
-                        Register("LR") = next_instr_addr<31:1> << 1.local_into();
+                        Register("LR") = next_instr_addr & REMOVE_LAST_BIT_MASK.local_into();
                         Register("LR") |= 1.local_into();
                         Register("EPSR") = Register("EPSR") | (1 << 27).local_into();
-                        target = target<31:1> << 1.local_into();
+                        target = target & REMOVE_LAST_BIT_MASK.local_into();
                         Register("PC+") = target;
                     ])
                 }
@@ -519,7 +521,7 @@ impl Convert for (usize, V7Operation) {
                     let rm = bx.rm.local_into();
                     pseudo!([
                         let next_addr = rm;
-                        next_addr = next_addr<31:1> << 1.local_into();
+                        next_addr = next_addr & REMOVE_LAST_BIT_MASK.local_into();
                         Register("PC+") = next_addr;
                     ])
                 }
@@ -539,7 +541,7 @@ impl Convert for (usize, V7Operation) {
                         let old_z = Flag("Z");
                         SetZFlag(rn);
                         let dest = Register("PC+") + imm;
-                        dest = dest<31:1> << 1.local_into();
+                        dest = dest & REMOVE_LAST_BIT_MASK.local_into();
                         Jump(dest,cond);
                         Flag("Z") = old_z;
                     ])
@@ -652,14 +654,14 @@ impl Convert for (usize, V7Operation) {
                     }
                     ret
                 }
-                // TODO! Decide wether or not to use this 
+                // TODO! Decide whether or not to use this 
                 V7Operation::Dbg(_) => vec![],
                 V7Operation::Dmb(_) => {
-                    // todo!("This requires an exhaustive rewrite of the system to allow memory barriers")
+                    tracing::warn!("DMB: This requires an exhaustive rewrite of the system to allow memory barriers");
                     vec![]
                 }
                 V7Operation::Dsb(_) => {
-                    // todo!("This requires an exhaustive rewrite of the system to allow memory barriers")
+                    tracing::warn!("DSB: This requires an exhaustive rewrite of the system to allow memory barriers");
                     vec![]
                 }
                 V7Operation::EorImmediate(eor) => {
@@ -713,7 +715,12 @@ impl Convert for (usize, V7Operation) {
                     ret
 
                 }
-                V7Operation::Isb(_) => todo!("This needs to be revisited when the executor can handle it"),
+                // NOTE: This is used in un-analyzable code. If the barrier fails we cannot loop
+                // for ever.
+                V7Operation::Isb(_) => {
+                    tracing::warn!("Encountered ISB instruction. This cannot be analyzed, using a noop instead.");
+                    vec![]
+                }, //todo!("This needs to be revisited when the executor can handle it"),
                 V7Operation::It(it) => {
                     vec![
                     Operation::ConditionalExecution { 
@@ -752,7 +759,7 @@ impl Convert for (usize, V7Operation) {
 
                         if (contained) {
                             let target = LocalAddress(address,4);
-                            target = target<31:1> << 1.local_into();
+                            target = target & REMOVE_LAST_BIT_MASK.local_into();
                             Jump(target);
                         }
                         if (w) {
@@ -793,7 +800,7 @@ impl Convert for (usize, V7Operation) {
 
                         if (contained) {
                             let target = LocalAddress(address,4);
-                            target = target<31:1> << 1.local_into();
+                            target = target & REMOVE_LAST_BIT_MASK.local_into();
                             Jump(target);
                         }
                         if (w) {
@@ -826,7 +833,7 @@ impl Convert for (usize, V7Operation) {
                         }
 
                         if (is_pc) {
-                            data = data<31:1> << 1.local_into();
+                            data = data & REMOVE_LAST_BIT_MASK.local_into();
                             Jump(data);
                         }
                         else {
@@ -855,7 +862,7 @@ impl Convert for (usize, V7Operation) {
 
                         let data = LocalAddress(address,32);
                         if (rt == Register::PC){
-                            data = data<31:1> << 1.local_into();
+                            data = data & REMOVE_LAST_BIT_MASK.local_into();
                             Jump(data);
                         }
                         else {
@@ -896,7 +903,7 @@ impl Convert for (usize, V7Operation) {
                        }
 
                        if (rt_old == Register::PC){
-                           data = data<31:1> << 1.local_into();
+                           data = data & REMOVE_LAST_BIT_MASK.local_into();
                            Jump(data);
                        }
                        else {
@@ -1510,7 +1517,7 @@ impl Convert for (usize, V7Operation) {
                     consume!((s,rd, rm.local_into()) from mov);
                     if rd == Register::PC {
                         break 'outer_block pseudo!([
-                           let dest = rm<31:1> << 1.local_into();
+                           let dest = rm & REMOVE_LAST_BIT_MASK.local_into();
                            Jump(dest);
                         ]);
                     }
@@ -1567,7 +1574,7 @@ impl Convert for (usize, V7Operation) {
                                 // TODO! Add in DSP extension
                             }
                             if (((sysm>>3) & 0b11111) == 1 && (sysm & 0b100 == 0)) {
-                                // TODO! Need to track wether or not the mode is priv
+                                // TODO! Need to track whether or not the mode is priv
                             }
 
                             let primask = Register("PRIMASK");
@@ -1625,10 +1632,11 @@ impl Convert for (usize, V7Operation) {
                                 }
                             }
                             // Discarding the SP things for now
-                            // TODO! add in SP things
+                            // TODO! add in SP things, it is worth noting that this is
+                            // for privileged execution only.
                             if (((sysm>>3) & 0b11111) == 2 && (sysm&0b111 == 0)) {
                                 // TODO! Add in priv checks
-                                primask = primask<31:1> << 1.local_into();
+                                primask = primask & REMOVE_LAST_BIT_MASK.local_into();
                                 let intermediate = rn<0:0>;
                                 apsr |= intermediate;
                             }
@@ -1646,7 +1654,7 @@ impl Convert for (usize, V7Operation) {
                             }
                             if (((sysm>>3) & 0b11111) == 2 && (sysm&0b111 == 2)) {
                                 // TODO! Add om priv and priority checks here
-                                faultmask = faultmask<31:1> << 1.local_into();
+                                faultmask = faultmask & REMOVE_LAST_BIT_MASK.local_into();
                                 let intermediate = rn<0:0>;
                                 faultmask |= intermediate;
                             }
@@ -1838,6 +1846,9 @@ impl Convert for (usize, V7Operation) {
                     ret
                 }
                 V7Operation::PldImmediate(_pld) => {
+                    // NOTE:
+                    // This should be logged in the ARMv7 struct so we can know that the address
+                    // was preloaded in the cycle estimates.
                     todo!(" We need some speciality pre load instruction here")
                 }
                 V7Operation::PldLiteral(_) => todo!(" We need some speciality pre load instruction here"),
@@ -1857,7 +1868,6 @@ impl Convert for (usize, V7Operation) {
                             to_pop.push(reg.local_into());
                         }
                     }
-
                     pseudo!([
                         let address = Register("SP&");
                         Register("SP&") += (4*bc).local_into();
@@ -1868,7 +1878,7 @@ impl Convert for (usize, V7Operation) {
                         }
                         if (jump) {
                             address = LocalAddress(address,32);
-                            address = address<31:1> << 1.local_into();
+                            address = address & REMOVE_LAST_BIT_MASK.local_into();
                             Jump(address);
                         }
                     ])
@@ -2290,7 +2300,7 @@ impl Convert for (usize, V7Operation) {
                     ])
                 }
                 V7Operation::Sel(_) => todo!("SIMD"),
-                V7Operation::Sev(_) => todo!("Modelling"),
+                V7Operation::Sev(_) => vec![],// todo!("Modelling"),
                 V7Operation::Shadd16(shadd) => {
                     consume!((
                             rn.local_into(),
@@ -2379,6 +2389,23 @@ impl Convert for (usize, V7Operation) {
                             rm.local_into()
                             ) from shsub);
                     // TODO! Check that the overflow here is not problematic
+                    //
+                    // // SInt()
+                    // // ======
+                    //integer SInt(bits(N) x)
+                    //result = 0;
+                    //for i = 0 to N-1
+                    //if x<i> == ‘1’ then result = result + 2^i;
+                    //if x<N-1> == ‘1’ then result = result - 2^N;
+                    //return result;
+                    //UInt(x) is the integer whose unsigned representation is x:
+                    // // UInt()
+                    // // ======
+                    //integer UInt(bits(N) x)
+                    //result = 0;
+                    //for i = 0 to N-1
+                    //if x<i> == ‘1’ then result = result + 2^i;
+                    //return result;
                     pseudo!([
                             let diff1 = ZeroExtend(Signed(Resize(rn<7:0>,8) - Resize(rm<7:0>,8)),32);
                             let diff2 = ZeroExtend(Signed(Resize(rn<15:8>,8) - Resize(rm<15:8>,8)),32);
@@ -2506,7 +2533,7 @@ impl Convert for (usize, V7Operation) {
                     .local_into();
                     let mut ret = vec![];
                     pseudo!(ret.extend[
-                            // Shift will allways be LSL on the v7
+                            // Shift will always be LSL on the v7
                             let offset = rm << shift_n;
                             let address = rn + offset;
                             LocalAddress("address", 32) = rt;
@@ -2560,7 +2587,7 @@ impl Convert for (usize, V7Operation) {
                     }
                     .local_into();
                     pseudo!([
-                            // Shift will allways be LSL on the v7
+                            // Shift will always be LSL on the v7
                             let offset = rm << shift_n;
                             let address = rn + offset;
                             LocalAddress("address", 8) = rt;
@@ -2961,7 +2988,7 @@ impl Convert for (usize, V7Operation) {
                             }
                             let target = halfwords*2.local_into();
                             target = target + Register("PC+");
-                            target = target<31:1> << 1.local_into();
+                            target = target & REMOVE_LAST_BIT_MASK.local_into();
                             Jump(target);
                     ])
                 }
@@ -3274,8 +3301,8 @@ impl Convert for (usize, V7Operation) {
 
                         result = ZeroExtend(result,64) + rd_composite;
 
-                        rdhi = result<63:32:u64>;
-                        rdlo = result<32:0:u64>;
+                        rdhi = Resize(result<63:32:u64>,32);
+                        rdlo = Resize(result<32:0:u64>,32);
                     ])
                 }
                 V7Operation::Umull(umull) => {
@@ -3327,8 +3354,7 @@ impl Convert for (usize, V7Operation) {
                         rd = diff1<15:0>;
                         diff2 = diff2<15:0> << 16.local_into();
                         rd = rd | diff2;
-
-                            // TODO! Look in to the GE register setting
+                        // TODO! Look in to the GE register setting
                     ])
                 }
                 V7Operation::Usub8(_) => {
@@ -3398,9 +3424,13 @@ impl Convert for (usize, V7Operation) {
                         rd = ZeroExtend(rotated<15:0>,32);
                     ])
                 }
-                V7Operation::Wfe(_) => todo!("This requires extensive system modelling"),
-                V7Operation::Wfi(_) => todo!("This requires extensive system modelling"),
-                V7Operation::Yield(_) => todo!("This requires extensive system modelling"),
+                //Here we have to assume intant return.
+                V7Operation::Wfe(_) => vec![],//todo!("This requires extensive system modelling"), //
+                //Here we have to assume intant return.
+                V7Operation::Wfi(_) => vec![],//todo!("This requires extensive system modelling"),
+                //Here we have to assume intant return.
+                V7Operation::Yield(_) => vec![],//todo!("This requires extensive system modelling"),
+                // I think that we should simply write Any here. i.e. they are noops.
                 V7Operation::Svc(_) => todo!(),
                 V7Operation::Stc(_) => todo!(),
                 V7Operation::Mcr(_) => todo!(),
@@ -3427,6 +3457,7 @@ mod sealed {
 use sealed::Into;
 
 use self::sealed::ToString;
+
 
 impl sealed::Into<Operand> for Register {
     fn local_into(self) -> Operand {
@@ -3533,7 +3564,7 @@ impl sealed::Into<GAShift> for Shift {
 
 impl Into<Operand> for u32 {
     fn local_into(self) -> Operand {
-        Operand::Immidiate(DataWord::Word32(self))
+        Operand::Immediate(DataWord::Word32(self))
     }
 }
 fn mask_dyn(start: u32, end: u32) -> u32 {

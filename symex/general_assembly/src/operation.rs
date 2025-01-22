@@ -104,7 +104,7 @@ pub enum Operation {
 
     /// Bitwise or.
     ///
-    /// ```rust
+    /// ```ignore
     /// destination = operand1 | operand2
     /// ```
     #[allow(missing_docs)]
@@ -203,11 +203,29 @@ pub enum Operation {
     ZeroExtend {
         /// Where to store the result.
         destination: Operand,
+
         /// The value to be zero extended.
         operand: Operand,
+
         /// What bit is considered the last bit in operand
         /// before the extension.
         bits: u32,
+
+        /// The size of the output value.
+        target_bits: u32,
+    },
+
+    /// Extracts start_bit until stop_bit from the operand and right adjusts it
+    /// in to destination.
+    BitFieldExtract {
+        /// Where to store the result.
+        destination: Operand,
+        /// Which value to extract bits from.
+        operand: Operand,
+        /// Where to start the extraction.
+        start_bit: u32,
+        /// Where to stop the extraction.
+        stop_bit: u32,
     },
 
     /// Count the number of ones in the operand.
@@ -224,14 +242,15 @@ pub enum Operation {
         operand: Operand,
     },
 
-    /// Count the number of leading ones (most significant to leas significant).
+    /// Count the number of leading ones (most significant to least
+    /// significant).
     #[allow(missing_docs)]
     CountLeadingOnes {
         destination: Operand,
         operand: Operand,
     },
 
-    /// Count the number of leading zeroes (most significant to leas
+    /// Count the number of leading zeroes (most significant to least)
     /// significant).
     #[allow(missing_docs)]
     CountLeadingZeroes {
@@ -286,9 +305,9 @@ pub enum Operation {
         operand1: Operand,
         /// Right hand side of the operation.
         operand2: Operand,
-        /// Wether or not the operation was a subtraction.
+        /// Whether or not the operation was a subtraction.
         sub: bool,
-        /// Wether or not the operation used the carry bit.
+        /// Whether or not the operation used the carry bit.
         carry: bool,
     },
 
@@ -319,9 +338,9 @@ pub enum Operation {
         operand1: Operand,
         /// Right hand side of the operation.
         operand2: Operand,
-        /// Wether or not the operation was subtraction.
+        /// Whether or not the operation was subtraction.
         sub: bool,
-        /// Wether or not the operation used the carry flag.
+        /// Whether or not the operation used the carry flag.
         carry: bool,
     },
 

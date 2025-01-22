@@ -1,7 +1,9 @@
 use disarmv7::prelude::{Condition, Operation as V7Operation, Register};
 
+use super::ArmV7EM;
 // use general_assembly::operation::Operation;
 use crate::general_assembly::{instruction::CycleCount, state::GAState};
+
 impl super::ArmV7EM {
     pub fn memory_access(instr: &V7Operation) -> bool {
         use V7Operation::*;
@@ -102,9 +104,9 @@ impl super::ArmV7EM {
         }
     }
 
-    pub fn cycle_count_m4_core(instr: &V7Operation) -> CycleCount {
+    pub fn cycle_count_m4_core(instr: &V7Operation) -> CycleCount<Self> {
         let p = 3;
-        let pipeline = |state: &GAState| match state.get_last_instruction() {
+        let pipeline = |state: &GAState<ArmV7EM>| match state.get_last_instruction() {
             Some(instr) => match instr.memory_access {
                 true => 1,
                 false => 2,
@@ -128,7 +130,7 @@ impl super::ArmV7EM {
             V7Operation::AsrImmediate(_) | V7Operation::AsrRegister(_) => CycleCount::Value(1),
             V7Operation::B(b) => {
                 if b.condition != Condition::None {
-                    let counter = |state: &GAState| {
+                    let counter = |state: &GAState<ArmV7EM>| {
                         // match (state.get_next_instruction(), state.get_has_jumped()) {
                         //     (
                         //         Ok(crate::general_assembly::state::HookOrInstruction::Instruction(
@@ -156,7 +158,9 @@ impl super::ArmV7EM {
                     CycleCount::Function(counter)
                 } else {
                     // CycleCount::Value(1 + 3)
-                    CycleCount::Value(1 + 1)
+
+                    // This is a gross over estimation, it should be more like 1+1
+                    CycleCount::Value(1 + 3)
                 }
             }
             V7Operation::Bfc(_) => CycleCount::Value(1),
@@ -167,7 +171,7 @@ impl super::ArmV7EM {
             V7Operation::Blx(_) => CycleCount::Value(1 + 3),
             V7Operation::Bx(_) => CycleCount::Value(1 + 3),
             V7Operation::Cbz(_) => {
-                let counter = |state: &GAState| match state.get_has_jumped() {
+                let counter = |state: &GAState<ArmV7EM>| match state.get_has_jumped() {
                     true => 1 + 3,
                     false => 1,
                 };
@@ -184,9 +188,9 @@ impl super::ArmV7EM {
             V7Operation::Dsb(_) => todo!("This requires a model of barriers"),
             V7Operation::EorImmediate(_) | V7Operation::EorRegister(_) => CycleCount::Value(1),
             V7Operation::Isb(_) => todo!("This requires a model of barriers"),
-            // TODO! Add detection for wether this is folded or not, if it is the value here is 0
+            // TODO! Add detection for whether this is folded or not, if it is the value here is 0
             V7Operation::It(_) => {
-                let counter = |state: &GAState| match state.get_last_instruction() {
+                let counter = |state: &GAState<ArmV7EM>| match state.get_last_instruction() {
                     Some(instr) => match instr.instruction_size {
                         16 => 0,
                         _ => 1,
@@ -241,7 +245,7 @@ impl super::ArmV7EM {
             V7Operation::Ldrex(_) | V7Operation::Ldrexb(_) | V7Operation::Ldrexh(_) => {
                 CycleCount::Value(2)
             }
-            // TODO! Add in model of contigous loads to allow next load to be single cycle
+            // TODO! Add in model of contiguous loads to allow next load to be single cycle
             V7Operation::LdrhImmediate(_)
             | V7Operation::LdrhLiteral(_)
             | V7Operation::LdrhRegister(_)
@@ -316,7 +320,7 @@ impl super::ArmV7EM {
             V7Operation::Sasx(_) => CycleCount::Value(1),
             V7Operation::SbcImmediate(_) | V7Operation::SbcRegister(_) => CycleCount::Value(1),
             V7Operation::Sbfx(_) => CycleCount::Value(1),
-            // TODO! Add way to find wether or not this is 12 or 2
+            // TODO! Add way to find whether or not this is 12 or 2
             V7Operation::Sdiv(_) => CycleCount::Value(12),
             V7Operation::Sel(_) => CycleCount::Value(1),
             V7Operation::Sev(_) => CycleCount::Value(1),
@@ -377,7 +381,7 @@ impl super::ArmV7EM {
             V7Operation::Sxth(_) => CycleCount::Value(1),
             V7Operation::Tb(_) => CycleCount::Value(2 + p),
             // TODO!  The docs do not mention any cycle count for this
-            // might be incorret
+            // might be incorrect
             V7Operation::TeqImmediate(_) | V7Operation::TeqRegister(_) => CycleCount::Value(1),
             V7Operation::TstImmediate(_) | V7Operation::TstRegister(_) => CycleCount::Value(1),
             V7Operation::Uadd16(_) => CycleCount::Value(1),

@@ -20,7 +20,7 @@ use super::{
 use crate::{
     memory::to_bytes_u32,
     smt::{DContext, DExpr, SolverError},
-    vm::{Overriden, StackFrame},
+    vm::{Overridden, StackFrame},
 };
 
 pub struct LLVMExecutor<'vm> {
@@ -68,7 +68,7 @@ pub enum InstructionResult {
 
 pub enum ResolvedFunction {
     Function(Function),
-    Instrinic(Intrinsic),
+    Intrinsic(Intrinsic),
     Hook(Hook),
 }
 
@@ -135,12 +135,12 @@ impl<'vm> LLVMExecutor<'vm> {
                             let stack_frame = StackFrame::new_from_function(function, &arguments)?;
                             self.state.stack_frames.push(stack_frame);
                         }
-                        ResolvedFunction::Instrinic(_) | ResolvedFunction::Hook(_) => {
+                        ResolvedFunction::Intrinsic(_) | ResolvedFunction::Hook(_) => {
                             // For these we perform the entire function call at once, and handle the
                             // return. This is a bit of a special case.
                             let result = match function {
                                 ResolvedFunction::Function(_) => unreachable!(),
-                                ResolvedFunction::Instrinic(i) => i(self, &call.arguments),
+                                ResolvedFunction::Intrinsic(i) => i(self, &call.arguments),
                                 ResolvedFunction::Hook(i) => i(self, &call.arguments),
                             }?;
 
@@ -249,10 +249,10 @@ impl<'vm> LLVMExecutor<'vm> {
     /// Resolve a function address to a concrete function.
     fn resolve_function(&mut self, called_value: Value) -> Result<ResolvedFunction> {
         let fn_lookup = |function: Function| -> ResolvedFunction {
-            if let Some(overriden) = self.project.get_function(function.name()) {
-                match overriden {
-                    Overriden::Intrinsic(i) => ResolvedFunction::Instrinic(i),
-                    Overriden::Hook(h) => ResolvedFunction::Hook(h),
+            if let Some(overridden) = self.project.get_function(function.name()) {
+                match overridden {
+                    Overridden::Intrinsic(i) => ResolvedFunction::Intrinsic(i),
+                    Overridden::Hook(h) => ResolvedFunction::Hook(h),
                 }
             } else {
                 ResolvedFunction::Function(function)
@@ -308,14 +308,14 @@ impl<'vm> LLVMExecutor<'vm> {
         // Create new paths for all but one of the addresses.
         let mut addresses = self.state.memory.resolve_addresses(&address, 50)?;
         for address in addresses.iter().skip(1) {
-            let constraint = address._eq(&address);
+            let constraint = address.eq(&address);
             self.fork(constraint)?;
         }
 
         // If we received more than one possible address, then constrain our current
         // address.
         if addresses.len() > 1 {
-            let constraint = address._eq(&addresses[0]);
+            let constraint = address.eq(&addresses[0]);
             self.state.constraints.assert(&constraint);
         }
 
@@ -622,7 +622,7 @@ impl<'vm> LLVMExecutor<'vm> {
         // Replace the old value with the new value if the old value matches the
         // comparison value.
         let old_value = self.state.memory.read(&address, new_value.len())?;
-        let condition = old_value._eq(&cmp);
+        let condition = old_value.eq(&cmp);
         let result = condition.ite(&new_value, &old_value);
         self.state.memory.write(&address, result.clone())?;
 
@@ -794,8 +794,8 @@ impl<'vm> LLVMExecutor<'vm> {
     fn icmp(&mut self, i: &instruction::ICmp) -> Result<InstructionResult> {
         debug!("{i}");
         let f = |lhs: &DExpr, rhs: &DExpr| match i.predicate() {
-            LLVMIntPredicate::LLVMIntEQ => lhs._eq(&rhs),
-            LLVMIntPredicate::LLVMIntNE => lhs._ne(&rhs),
+            LLVMIntPredicate::LLVMIntEQ => lhs.eq(&rhs),
+            LLVMIntPredicate::LLVMIntNE => lhs.ne(&rhs),
             LLVMIntPredicate::LLVMIntUGT => lhs.ugt(&rhs),
             LLVMIntPredicate::LLVMIntUGE => lhs.ugte(&rhs),
             LLVMIntPredicate::LLVMIntULT => lhs.ult(&rhs),
@@ -967,9 +967,9 @@ impl<'vm> LLVMExecutor<'vm> {
             let path_condition = self.state.get_expr(&value).unwrap();
 
             // Build default condition.
-            default_cond = default_cond.and(&condition._ne(&path_condition));
+            default_cond = default_cond.and(&condition.ne(&path_condition));
 
-            let constraint = condition._eq(&path_condition);
+            let constraint = condition.eq(&path_condition);
             if self.state.constraints.is_sat_with_constraint(&constraint)? {
                 debug!("{i}: path {:?} possible", bb);
                 possible_paths.push((bb, constraint));

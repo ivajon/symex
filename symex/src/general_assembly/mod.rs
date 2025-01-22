@@ -10,6 +10,7 @@ pub mod run_config;
 pub mod state;
 pub mod vm;
 
+use arch::ArchError;
 pub use run_config::*;
 
 pub type Result<T> = std::result::Result<T, GAError>;
@@ -19,17 +20,20 @@ pub enum GAError {
     #[error("Project error: {0}")]
     ProjectError(#[from] ProjectError),
 
-    #[error("Memmory error: {0}")]
+    #[error("memory error: {0}")]
     MemoryError(#[from] MemoryError),
 
     #[error("Entry function {0} not found.")]
     EntryFunctionNotFound(String),
 
-    #[error("Writing to static memory not permited.")]
+    #[error("Writing to static memory not permitted.")]
     WritingToStaticMemoryProhibited,
 
     #[error("Solver error.")]
     SolverError(#[from] SolverError),
+
+    #[error("Architecture error.")]
+    ArchError(#[from] ArchError),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -63,6 +67,6 @@ pub struct Config {
     pub max_memory_access_resolutions: usize,
 
     /// Maximum amount of concretizations for memmove, memcpy, memset and other
-    /// intrisic functions. Default is `100`.
+    /// intrinsic functions. Default is `100`.
     pub max_intrinsic_concretizations: usize,
 }

@@ -5,7 +5,6 @@ use log::debug;
 use std::{fs, path::PathBuf};
 #[cfg(feature = "llvm")]
 use symex::run::{self, RunConfig, SolveFor};
-use tracing_subscriber;
 
 const BINARY_NAME: &str = "symex";
 
@@ -75,8 +74,6 @@ fn run() -> Result<()> {
 
 #[cfg(not(feature = "llvm"))]
 fn run_elf(args: Args) -> Result<()> {
-    use symex::general_assembly::RunConfig;
-
     use crate::build::generate_binary_build_command;
 
     debug!("Run elf file.");
@@ -86,15 +83,10 @@ fn run_elf(args: Args) -> Result<()> {
             let opts = settings_from_args(&args);
 
             // Build LLVM BC file.
-            let cargo_out = generate_binary_build_command(&opts).output()?;
+            let cargo_out = generate_binary_build_command(&opts).status()?;
             debug!("cargo output: {cargo_out:?}");
-            if !cargo_out.status.success() {
-                let cargo_output = String::from_utf8(cargo_out.stderr)?;
-                return Err(anyhow!(cargo_output));
-            }
-            let output = String::from_utf8(cargo_out.stderr)?;
-            if !output.is_empty() {
-                eprintln!("{output}");
+            if !cargo_out.success() {
+                return Err(anyhow!("Failed to build using cargo sub command"));
             }
 
             // Create path to .bc file.
@@ -111,16 +103,7 @@ fn run_elf(args: Args) -> Result<()> {
     };
     debug!("Starting analasys on target: {path}, function: {function_name}");
 
-    let cfg = RunConfig {
-        pc_hooks: vec![],
-        register_read_hooks: vec![],
-        register_write_hooks: vec![],
-        memory_read_hooks: vec![],
-        memory_write_hooks: vec![],
-        show_path_results: true,
-    };
-
-    symex::run_elf::run_elf(&path, &function_name, cfg)?;
+    symex::run_elf::run_elf(&path, &function_name, true)?;
     Ok(())
 }
 
@@ -195,7 +178,6 @@ fn settings_from_args(opts: &Args) -> Settings {
         target,
         features,
         release: opts.release,
-        embed_bitcode: opts.embed_bitcode.unwrap_or(false),
     }
 }
 

@@ -5,7 +5,7 @@ use std::collections::{HashMap, VecDeque};
 use general_assembly::{condition::Condition, operand::DataWord};
 use tracing::{debug, trace};
 
-use super::{instruction::Instruction, project::Project};
+use super::{arch::Arch, instruction::Instruction, project::Project};
 use crate::{
     elf_util::{ExpressionType, Variable},
     general_assembly::{
@@ -17,21 +17,21 @@ use crate::{
     smt::{DContext, DExpr, DSolver},
 };
 
-pub enum HookOrInstruction {
-    PcHook(PCHook),
-    Instruction(Instruction),
+pub enum HookOrInstruction<'a, A: Arch> {
+    PcHook(&'a PCHook<A>),
+    Instruction(Instruction<A>),
 }
 
 #[derive(Clone, Debug)]
-pub struct ContinueInsideInstruction {
-    pub instruction: Instruction,
+pub struct ContinueInsideInstruction<A: Arch> {
+    pub instruction: Instruction<A>,
     pub index: usize,
     pub local: HashMap<String, DExpr>,
 }
 
 #[derive(Clone, Debug)]
-pub struct GAState {
-    pub project: &'static Project,
+pub struct GAState<A: Arch> {
+    pub project: &'static Project<A>,
     pub ctx: &'static DContext,
     pub constraints: DSolver,
     pub marked_symbolic: Vec<Variable>,
@@ -39,11 +39,13 @@ pub struct GAState {
     pub count_cycles: bool,
     pub cycle_count: usize,
     pub cycle_laps: Vec<(usize, String)>,
-    pub last_instruction: Option<Instruction>,
+    pub last_instruction: Option<Instruction<A>>,
     pub last_pc: u64,
     pub registers: HashMap<String, DExpr>,
-    pub continue_in_instruction: Option<ContinueInsideInstruction>,
-    pub current_instruction: Option<Instruction>,
+    pub continue_in_instruction: Option<ContinueInsideInstruction<A>>,
+    pub current_instruction: Option<Instruction<A>>,
+    pub architecture: A,
+    pub inital_sp: u64,
     pc_register: u64, // this register is special
     flags: HashMap<String, DExpr>,
     instruction_counter: usize,
@@ -51,14 +53,15 @@ pub struct GAState {
     instruction_conditions: VecDeque<Condition>,
 }
 
-impl GAState {
+impl<A: Arch> GAState<A> {
     /// Create a new state.
     pub fn new(
         ctx: &'static DContext,
-        project: &'static Project,
+        project: &'static Project<A>,
         constraints: DSolver,
         function: &str,
         end_address: u64,
+        architecture: A,
     ) -> Result<Self> {
         let pc_reg = match project.get_symbol_address(function) {
             Some(a) => a,
@@ -112,6 +115,8 @@ impl GAState {
             continue_in_instruction: None,
             current_instruction: None,
             instruction_conditions: VecDeque::new(),
+            architecture,
+            inital_sp: sp_reg,
         })
     }
 
@@ -140,7 +145,7 @@ impl GAState {
     }
 
     /// Gets the last instruction that was executed.
-    pub fn get_last_instruction(&self) -> Option<Instruction> {
+    pub fn get_last_instruction(&self) -> Option<Instruction<A>> {
         self.last_instruction.clone()
     }
 
@@ -173,7 +178,7 @@ impl GAState {
     }
 
     /// Update the last instruction that was executed.
-    pub fn set_last_instruction(&mut self, instruction: Instruction) {
+    pub fn set_last_instruction(&mut self, instruction: Instruction<A>) {
         self.last_instruction = Some(instruction);
     }
 
@@ -192,11 +197,12 @@ impl GAState {
 
     /// Create a state used for testing.
     pub fn create_test_state(
-        project: &'static Project,
+        project: &'static Project<A>,
         ctx: &'static DContext,
         constraints: DSolver,
         start_pc: u64,
         start_stack: u64,
+        architecture: A,
     ) -> Self {
         let pc_reg = start_pc;
         let ptr_size = project.get_ptr_size();
@@ -229,6 +235,7 @@ impl GAState {
             registers,
             pc_register: pc_reg,
             flags,
+            inital_sp: start_pc,
             instruction_counter: 0,
             has_jumped: false,
             last_instruction: None,
@@ -237,6 +244,7 @@ impl GAState {
             continue_in_instruction: None,
             current_instruction: None,
             instruction_conditions: VecDeque::new(),
+            architecture,
         }
     }
 
@@ -259,13 +267,14 @@ impl GAState {
                                 None => todo!("e"),
                             })
                             .collect(),
-                        crate::smt::Solutions::AtLeast(_v) => todo!(),
+                        crate::smt::Solutions::AtLeast(_v) => todo!("Handle with lower bound, this should likely be done using a sub sample of the signal"),
                     };
                     trace!("{} possible PC values", values.len());
                     for v in values {
                         trace!("Possible PC: {:#X}", v);
                     }
-                    todo!("handel symbolic branch")
+
+                    todo!("handle symbolic branch")
                 }
             };
             self.pc_register = value;
@@ -350,26 +359,26 @@ impl GAState {
             Condition::LT => {
                 let n = self.get_flag("N".to_owned()).unwrap();
                 let v = self.get_flag("V".to_owned()).unwrap();
-                n._ne(&v)
+                n.ne(&v)
             }
             Condition::GT => {
                 let z = self.get_flag("Z".to_owned()).unwrap();
                 let n = self.get_flag("N".to_owned()).unwrap();
                 let v = self.get_flag("V".to_owned()).unwrap();
-                z.not().and(&n._eq(&v))
+                z.not().and(&n.eq(&v))
             }
             Condition::LE => {
                 let z = self.get_flag("Z".to_owned()).unwrap();
                 let n = self.get_flag("N".to_owned()).unwrap();
                 let v = self.get_flag("V".to_owned()).unwrap();
-                z.and(&n._ne(&v))
+                z.and(&n.ne(&v))
             }
             Condition::None => self.ctx.from_bool(true),
         })
     }
 
     /// Get the next instruction based on the address in the PC register.
-    pub fn get_next_instruction(&self) -> Result<HookOrInstruction> {
+    pub fn get_next_instruction(&self) -> Result<HookOrInstruction<'_, A>> {
         let pc = self.pc_register & !(0b1); // Not applicable for all architectures TODO: Fix this.;
         match self.project.get_pc_hook(pc) {
             Some(hook) => Ok(HookOrInstruction::PcHook(hook)),
@@ -392,7 +401,7 @@ impl GAState {
         match address.get_constant() {
             Some(address_const) => {
                 if self.project.address_in_range(address_const) {
-                    // read from static memmory in project
+                    // read from static memory in project
                     let value = match self.project.get_word(address_const)? {
                         DataWord::Word64(data) => self.ctx.from_u64(data, 64),
                         DataWord::Word32(data) => self.ctx.from_u64(data as u64, 32),
@@ -405,12 +414,12 @@ impl GAState {
                 }
             }
 
-            // For non constant addresses always read non_static memmory
+            // For non constant addresses always read non_static memory
             None => self.read_word_from_memory_no_static(address),
         }
     }
 
-    /// Write a word to memory. Will respect the endianess of the project.
+    /// Write a word to memory. Will respect the endianness of the project.
     pub fn write_word_to_memory(&mut self, address: &DExpr, value: DExpr) -> Result<()> {
         match address.get_constant() {
             Some(address_const) => {
@@ -421,8 +430,17 @@ impl GAState {
                 }
             }
 
-            // For non constant addresses always read non_static memmory
+            // For non constant addresses always read non_static memory
             None => self.write_word_from_memory_no_static(address, value),
         }
+    }
+
+    pub fn instruction_from_array_ptr(
+        &self,
+        data: &[u8],
+    ) -> crate::general_assembly::project::Result<Instruction<A>> {
+        self.architecture
+            .translate(data, self)
+            .map_err(|el| el.into())
     }
 }

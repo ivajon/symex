@@ -54,7 +54,7 @@ macro_rules! get_operand {
     }};
 }
 
-/// This can be mis used but will fail at compile time if not correctly
+/// This can be miss used but will fail at compile time if not correctly
 /// structured.
 macro_rules! test {
     ($exec:ident {
@@ -71,8 +71,8 @@ macro_rules! test {
 
             $(== $eq_rhs:literal)?
             $(!= $neq_rhs:literal)?
-            $(== ($eq_rhs_expr:expr))?
-            $(!= ($neq_rhs_expr:expr))?
+            $(== ($eq_rhs_expr:expr_2021))?
+            $(!= ($neq_rhs_expr:expr_2021))?
         ),*
     }) => {
         $(
@@ -80,12 +80,23 @@ macro_rules! test {
                 $exec $(register $reg)? $(address $address $width)? $(flag $flag)?
             );
 
+            println!("{} = {}",
+                stringify!(
+                    $($reg)?
+                    $($address)?
+                    $($flag)?
+                    $(!= $eq_rhs)?
+                    $(== $neq_rhs)?
+                    $(!= $eq_rhs_expr)?
+                    $(== $neq_rhs_expr)?
+                ),result);
             assert!(
                 result
                 $(== $eq_rhs)?
                 $(!= $neq_rhs)?
                 $(!= $eq_rhs_expr)?
                 $(== $neq_rhs_expr)?,
+
                 stringify!(
                     $($reg)?
                     $($address)?
@@ -101,7 +112,7 @@ macro_rules! test {
     };
 }
 
-/// This can be mis used but will fail at compile time if not correctly
+/// This can be miss used but will fail at compile time if not correctly
 /// structured.
 macro_rules! initiate {
     ($exec:ident {
@@ -116,12 +127,12 @@ macro_rules! initiate {
                 address ($address:literal,$width:literal)
             )?
 
-            = $eq_value:expr
+            = $eq_value:expr_2021
         );*
     }) => {
         $(
             let operand = initiate!($exec $(register $reg)? $(address $address $width)? $(flag $flag)?);
-            let intermediate = Operand::Immidiate(general_assembly::operand::DataWord::Word32($eq_value as u32));
+            let intermediate = Operand::Immediate(general_assembly::operand::DataWord::Word32($eq_value as u32));
             let operation = general_assembly::operation::Operation::Move { destination: operand, source: intermediate};
             $exec.execute_operation(&operation,&mut HashMap::new()).expect("Malformed test");
         )*
@@ -141,7 +152,7 @@ macro_rules! initiate {
     };
 }
 
-fn setup_test_vm() -> VM {
+fn setup_test_vm() -> VM<ArmV7EM> {
     // create an empty project
     let mut project = Box::new(Project::manual_project(
         vec![],
@@ -149,7 +160,6 @@ fn setup_test_vm() -> VM {
         0,
         WordSize::Bit32,
         Endianness::Little,
-        ArmV7EM {},
         HashMap::new(),
         HashMap::new(),
         HashMap::new(),
@@ -159,13 +169,14 @@ fn setup_test_vm() -> VM {
         HashMap::new(),
         vec![],
     ));
-    project.add_hooks();
+    let mut arch = ArmV7EM::default();
+    project.add_hooks(&mut arch);
 
     let project = Box::leak(project);
     let context = Box::new(DContext::new());
     let context = Box::leak(context);
     let solver = DSolver::new(context);
-    let state = GAState::create_test_state(project, context, solver, 0, u32::MAX as u64);
+    let state = GAState::create_test_state(project, context, solver, 0, u32::MAX as u64, arch);
     let vm = VM::new_with_state(project, state);
     vm
 }
@@ -1802,7 +1813,7 @@ fn test_b() {
 }
 
 #[test]
-fn test_b_coditional() {
+fn test_b_conditional() {
     let mut vm = setup_test_vm();
     let project = vm.project;
 
@@ -2305,7 +2316,7 @@ fn test_bl() {
         GAOperation::Add {
             destination: Operand::Local("newPC".to_owned()),
             operand1: Operand::Local("PC".to_owned()),
-            operand2: Operand::Immidiate(DataWord::Word32(0x4)),
+            operand2: Operand::Immediate(DataWord::Word32(0x4)),
         },
         GAOperation::Move {
             destination: Operand::Register("PC".to_owned()),
@@ -4869,5 +4880,80 @@ fn test_tb() {
 
     test!(executor {
         register PC == 0x48
+    });
+}
+
+#[test]
+fn test_bfi_2() {
+    let mut vm = setup_test_vm();
+    let project = vm.project;
+
+    let mut executor = GAExecutor::from_state(vm.paths.get_path().unwrap().state, &mut vm, project);
+
+    initiate!(executor {
+        register R1 = 0b110011;
+        register R2 = 0x1;
+        address(0x123,8) = 0x23;
+        address(0x124,8) = 0x22;
+        address(0x125,8) = 0x21;
+        flag N = 0;
+        flag Z = 0;
+        flag V = 0;
+        flag C = 0
+    });
+
+    let instruction: Operation = Bfi::builder()
+        .set_rn(Register::R1)
+        .set_rd(Register::R2)
+        .set_lsb(3)
+        .set_msb(5)
+        .complete()
+        .into();
+
+    let instruction = Instruction {
+        operations: (16, instruction).convert(false),
+        memory_access: false,
+        instruction_size: 16,
+        max_cycle: CycleCount::Value(0),
+    };
+    executor
+        .execute_instruction(&instruction)
+        .expect("Malformed instruction");
+
+    test!(executor {
+        register R2 == 0b011001
+    });
+    initiate!(executor {
+        register R1 = 0b110011;
+        register R2 = 0x1;
+        address(0x123,8) = 0x23;
+        address(0x124,8) = 0x22;
+        address(0x125,8) = 0x21;
+        flag N = 0;
+        flag Z = 0;
+        flag V = 0;
+        flag C = 0
+    });
+
+    let instruction: Operation = Bfi::builder()
+        .set_rn(Register::R1)
+        .set_rd(Register::R2)
+        .set_lsb(5)
+        .set_msb(5)
+        .complete()
+        .into();
+
+    let instruction = Instruction {
+        operations: (16, instruction).convert(false),
+        memory_access: false,
+        instruction_size: 16,
+        max_cycle: CycleCount::Value(0),
+    };
+    executor
+        .execute_instruction(&instruction)
+        .expect("Malformed instruction");
+
+    test!(executor {
+        register R2 == 0b100001
     });
 }

@@ -7,12 +7,26 @@
 //! architecture specific hooks.
 
 pub mod arm;
+/// Defines discovery behaviour for the architectures.
+pub mod discover;
 use std::fmt::{Debug, Display};
 
+use arm::{v6::ArmV6M, v7::ArmV7EM};
 use object::File;
 use thiserror::Error;
 
 use crate::general_assembly::{instruction::Instruction, state::GAState, RunConfig};
+
+/// Enumerates all of the discoverable machine code formats.
+///
+/// # Note
+///
+/// One might add support for other formats using the [`Arch`] trait with the
+/// caveat that they cannot be automatically discovered.
+pub enum SupportedArchitechture {
+    ArmV7EM(ArmV7EM),
+    ArmV6M(ArmV6M),
+}
 
 #[derive(Debug, Eq, PartialEq, PartialOrd, Clone, Error)]
 /// General architecture related errors.
@@ -39,7 +53,7 @@ pub enum ArchError {
     ImplementorStringError(&'static str),
 
     /// Thrown when something goes wrong during instruction parsing.
-    #[error("Error occured while parsing.")]
+    #[error("Error occurred while parsing.")]
     ParsingError(#[from] ParseError),
 }
 
@@ -62,42 +76,36 @@ pub enum ParseError {
     Unpredictable,
 
     /// Trying to access an invalid register.
-    #[error("Parser encounterd an invalid register.")]
+    #[error("Parser encountered an invalid register.")]
     InvalidRegister,
 
     /// Invalid condition code used.
-    #[error("Parser encounterd an invalid conditon.")]
+    #[error("Parser encountered an invalid condition.")]
     InvalidCondition,
 
     /// A generic parsing error.
-    #[error("Parser encounterd some unspecified error.")]
+    #[error("Parser encountered some unspecified error.")]
     Generic(&'static str),
+}
+
+pub enum Architecture {
+    Armv7EM(ArmV7EM),
+    Armv6EM(ArmV6M),
 }
 
 /// A generic architecture
 ///
 /// Denotes that the implementer can be treated as an architecture in this
 /// crate.
-pub trait Arch: Debug + Display {
+pub trait Arch: Debug + Display + Clone + Sized + 'static {
     /// Converts a slice of bytes to an [`Instruction`]
-    fn translate(&self, buff: &[u8], state: &GAState) -> Result<Instruction, ArchError>;
+    fn translate(&self, buff: &[u8], state: &GAState<Self>)
+        -> Result<Instruction<Self>, ArchError>;
 
     /// Adds the architecture specific hooks to the [`RunConfig`]
-    fn add_hooks(&self, cfg: &mut RunConfig);
-}
+    fn add_hooks(&self, cfg: &mut RunConfig<Self>);
 
-/// A generic family of [`Architectures`](Arch).
-///
-/// This trait denotes that the implementer can discern between the different
-/// variants of architectures in the family using only the [`File`].
-pub trait Family: Debug {
-    /// Tries to convert a given binary to an architecture in the family.
-    fn try_from(file: &File) -> Result<Box<dyn Arch>, ArchError>;
-}
-
-/// Tries to get the target [`Architecture`](Arch) for the binary [`File`].
-///
-/// Uses dependency injection to allow usage of generic [`Family`].
-pub fn arch_from_family<F: Family>(file: &File) -> Result<Box<dyn Arch>, ArchError> {
-    F::try_from(file)
+    /// Returns an instance of self if the file is defined for this
+    /// specific architecture.
+    fn discover(file: &File<'_>) -> Result<Option<Self>, ArchError>;
 }
