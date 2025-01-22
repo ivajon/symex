@@ -17,6 +17,12 @@ use thiserror::Error;
 
 use crate::general_assembly::{instruction::Instruction, state::GAState, RunConfig};
 
+/// Enumerates all of the discoverable machine code formats.
+///
+/// # Note
+///
+/// One might add support for other formats using the [`Arch`] trait with the
+/// caveat that they cannot be automatically discovered.
 pub enum SupportedArchitechture {
     ArmV7EM(ArmV7EM),
     ArmV6M(ArmV6M),

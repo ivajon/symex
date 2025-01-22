@@ -8,6 +8,7 @@ use super::{
 };
 
 impl SupportedArchitechture {
+    /// Discovers all supported binary formats from the binary file.
     pub fn discover(obj_file: &File<'_>) -> Result<Self, ArchError> {
         let architecture = obj_file.architecture();
 
