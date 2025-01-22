@@ -274,7 +274,7 @@ impl<A: Arch> GAState<A> {
                         trace!("Possible PC: {:#X}", v);
                     }
 
-                    todo!("handel symbolic branch")
+                    todo!("handle symbolic branch")
                 }
             };
             self.pc_register = value;
@@ -359,26 +359,26 @@ impl<A: Arch> GAState<A> {
             Condition::LT => {
                 let n = self.get_flag("N".to_owned()).unwrap();
                 let v = self.get_flag("V".to_owned()).unwrap();
-                n._ne(&v)
+                n.ne(&v)
             }
             Condition::GT => {
                 let z = self.get_flag("Z".to_owned()).unwrap();
                 let n = self.get_flag("N".to_owned()).unwrap();
                 let v = self.get_flag("V".to_owned()).unwrap();
-                z.not().and(&n._eq(&v))
+                z.not().and(&n.eq(&v))
             }
             Condition::LE => {
                 let z = self.get_flag("Z".to_owned()).unwrap();
                 let n = self.get_flag("N".to_owned()).unwrap();
                 let v = self.get_flag("V".to_owned()).unwrap();
-                z.and(&n._ne(&v))
+                z.and(&n.ne(&v))
             }
             Condition::None => self.ctx.from_bool(true),
         })
     }
 
     /// Get the next instruction based on the address in the PC register.
-    pub fn get_next_instruction(&self) -> Result<HookOrInstruction<A>> {
+    pub fn get_next_instruction(&self) -> Result<HookOrInstruction<'_, A>> {
         let pc = self.pc_register & !(0b1); // Not applicable for all architectures TODO: Fix this.;
         match self.project.get_pc_hook(pc) {
             Some(hook) => Ok(HookOrInstruction::PcHook(hook)),
@@ -419,7 +419,7 @@ impl<A: Arch> GAState<A> {
         }
     }
 
-    /// Write a word to memory. Will respect the endianess of the project.
+    /// Write a word to memory. Will respect the endianness of the project.
     pub fn write_word_to_memory(&mut self, address: &DExpr, value: DExpr) -> Result<()> {
         match address.get_constant() {
             Some(address_const) => {

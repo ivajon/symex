@@ -242,14 +242,15 @@ pub enum Operation {
         operand: Operand,
     },
 
-    /// Count the number of leading ones (most significant to leas significant).
+    /// Count the number of leading ones (most significant to least
+    /// significant).
     #[allow(missing_docs)]
     CountLeadingOnes {
         destination: Operand,
         operand: Operand,
     },
 
-    /// Count the number of leading zeroes (most significant to leas
+    /// Count the number of leading zeroes (most significant to least)
     /// significant).
     #[allow(missing_docs)]
     CountLeadingZeroes {
@@ -304,9 +305,9 @@ pub enum Operation {
         operand1: Operand,
         /// Right hand side of the operation.
         operand2: Operand,
-        /// Wether or not the operation was a subtraction.
+        /// Whether or not the operation was a subtraction.
         sub: bool,
-        /// Wether or not the operation used the carry bit.
+        /// Whether or not the operation used the carry bit.
         carry: bool,
     },
 
@@ -337,9 +338,9 @@ pub enum Operation {
         operand1: Operand,
         /// Right hand side of the operation.
         operand2: Operand,
-        /// Wether or not the operation was subtraction.
+        /// Whether or not the operation was subtraction.
         sub: bool,
-        /// Wether or not the operation used the carry flag.
+        /// Whether or not the operation used the carry flag.
         carry: bool,
     },
 

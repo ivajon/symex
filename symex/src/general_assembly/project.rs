@@ -212,7 +212,7 @@ impl<A: Arch> Project<A> {
         self.range_memory_write_hooks = range_memory_write_hooks;
     }
 
-    pub fn from_path(cfg: &mut RunConfig<A>, obj_file: File, architecture: &A) -> Result<Self> {
+    pub fn from_path(cfg: &mut RunConfig<A>, obj_file: File<'_>, architecture: &A) -> Result<Self> {
         let segments = Segments::from_file(&obj_file);
         let endianness = if obj_file.is_little_endian() {
             Endianness::Little

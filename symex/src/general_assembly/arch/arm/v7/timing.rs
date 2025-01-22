@@ -188,7 +188,7 @@ impl super::ArmV7EM {
             V7Operation::Dsb(_) => todo!("This requires a model of barriers"),
             V7Operation::EorImmediate(_) | V7Operation::EorRegister(_) => CycleCount::Value(1),
             V7Operation::Isb(_) => todo!("This requires a model of barriers"),
-            // TODO! Add detection for wether this is folded or not, if it is the value here is 0
+            // TODO! Add detection for whether this is folded or not, if it is the value here is 0
             V7Operation::It(_) => {
                 let counter = |state: &GAState<ArmV7EM>| match state.get_last_instruction() {
                     Some(instr) => match instr.instruction_size {
@@ -245,7 +245,7 @@ impl super::ArmV7EM {
             V7Operation::Ldrex(_) | V7Operation::Ldrexb(_) | V7Operation::Ldrexh(_) => {
                 CycleCount::Value(2)
             }
-            // TODO! Add in model of contigous loads to allow next load to be single cycle
+            // TODO! Add in model of contiguous loads to allow next load to be single cycle
             V7Operation::LdrhImmediate(_)
             | V7Operation::LdrhLiteral(_)
             | V7Operation::LdrhRegister(_)
@@ -320,7 +320,7 @@ impl super::ArmV7EM {
             V7Operation::Sasx(_) => CycleCount::Value(1),
             V7Operation::SbcImmediate(_) | V7Operation::SbcRegister(_) => CycleCount::Value(1),
             V7Operation::Sbfx(_) => CycleCount::Value(1),
-            // TODO! Add way to find wether or not this is 12 or 2
+            // TODO! Add way to find whether or not this is 12 or 2
             V7Operation::Sdiv(_) => CycleCount::Value(12),
             V7Operation::Sel(_) => CycleCount::Value(1),
             V7Operation::Sev(_) => CycleCount::Value(1),
@@ -381,7 +381,7 @@ impl super::ArmV7EM {
             V7Operation::Sxth(_) => CycleCount::Value(1),
             V7Operation::Tb(_) => CycleCount::Value(2 + p),
             // TODO!  The docs do not mention any cycle count for this
-            // might be incorret
+            // might be incorrect
             V7Operation::TeqImmediate(_) | V7Operation::TeqRegister(_) => CycleCount::Value(1),
             V7Operation::TstImmediate(_) | V7Operation::TstRegister(_) => CycleCount::Value(1),
             V7Operation::Uadd16(_) => CycleCount::Value(1),

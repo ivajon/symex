@@ -54,7 +54,7 @@ macro_rules! get_operand {
     }};
 }
 
-/// This can be mis used but will fail at compile time if not correctly
+/// This can be miss used but will fail at compile time if not correctly
 /// structured.
 macro_rules! test {
     ($exec:ident {
@@ -96,7 +96,7 @@ macro_rules! test {
                 $(!= $neq_rhs)?
                 $(!= $eq_rhs_expr)?
                 $(== $neq_rhs_expr)?,
-                
+
                 stringify!(
                     $($reg)?
                     $($address)?
@@ -112,7 +112,7 @@ macro_rules! test {
     };
 }
 
-/// This can be mis used but will fail at compile time if not correctly
+/// This can be miss used but will fail at compile time if not correctly
 /// structured.
 macro_rules! initiate {
     ($exec:ident {

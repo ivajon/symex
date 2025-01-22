@@ -18,7 +18,7 @@ impl Segments {
         }])
     }
 
-    pub fn from_file(file: &File) -> Self {
+    pub fn from_file(file: &File<'_>) -> Self {
         let elf_file = match file {
             File::Elf32(elf_file) => elf_file,
             File::Elf64(_elf_file) => todo!(),

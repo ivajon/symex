@@ -94,7 +94,7 @@ impl Arch for ArmV7EM {
         cfg.register_read_hooks.push(("SP&".to_owned(), read_sp));
         cfg.register_write_hooks.push(("SP&".to_owned(), write_sp));
 
-        // reset allways done
+        // reset always done
         let read_reset_done: MemoryReadHook<Self> = |state, _addr| {
             let value = state.ctx.from_u64(0xffff_ffff, 32);
             Ok(value)
@@ -123,7 +123,7 @@ impl Arch for ArmV7EM {
         })
     }
 
-    fn discover(file: &File) -> Result<Option<Self>, ArchError> {
+    fn discover(file: &File<'_>) -> Result<Option<Self>, ArchError> {
         let f = match file {
             File::Elf32(f) => Ok(f),
             _ => Err(ArchError::IncorrectFileType),

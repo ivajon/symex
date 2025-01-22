@@ -77,10 +77,16 @@ fn add_architecture_independent_hooks<A: Arch>(cfg: &mut RunConfig<A>) {
     ]);
 }
 
-/// Run symbolic execution on a elf file where `path` is the path to the ELF
+/// Run symbolic execution on a elf file.
+///
+/// `path` is the path to the ELF
 /// file and `function` is the function the execution starts at.
 /// During runtime it will determin the target architecture and select the
 /// appropriate executor for that enviornement.
+///
+/// # Panics
+///
+/// This function panics if the specified file does not exist.
 pub fn run_elf<P: AsRef<Path>>(
     path: P,
     function: &str,
@@ -139,10 +145,16 @@ pub fn run_elf<P: AsRef<Path>>(
     }
 }
 
-/// Run symbolic execution on a elf file where `path` is the path to the ELF
+/// Run symbolic execution on a elf file with a known [`Arch`].
+///
+/// `path` is the path to the ELF
 /// file and `function` is the function the execution starts at.
 /// Execution will use the provided [`RunConfig`] and allows for pre-configured
 /// hooks.
+///
+/// # Panics
+///
+/// This function panics if the specified file does not exist.
 pub fn run_elf_configured<A: Arch>(
     path: &str,
     function: &str,
@@ -200,7 +212,7 @@ fn run_elf_paths<A: Arch>(
         path_num += 1;
 
         let v_path_result = match path_result {
-            general_assembly::executor::PathResult::Success(_v) => PathStatus::Ok(None),
+            general_assembly::executor::PathResult::Success(_) => PathStatus::Ok(None),
             general_assembly::executor::PathResult::Failure(reason) => {
                 PathStatus::Failed(ErrorReason {
                     error_message: reason.to_owned(),

@@ -397,8 +397,8 @@ pub(crate) fn const_to_expr_zero_size(
             Expression::GetElementPtr(_) => todo!(),
             Expression::ICmp(i) => {
                 let f = |lhs: &DExpr, rhs: &DExpr| match i.predicate() {
-                    LLVMIntPredicate::LLVMIntEQ => lhs._eq(&rhs),
-                    LLVMIntPredicate::LLVMIntNE => lhs._ne(&rhs),
+                    LLVMIntPredicate::LLVMIntEQ => lhs.eq(&rhs),
+                    LLVMIntPredicate::LLVMIntNE => lhs.ne(&rhs),
                     LLVMIntPredicate::LLVMIntUGT => lhs.ugt(&rhs),
                     LLVMIntPredicate::LLVMIntUGE => lhs.ugte(&rhs),
                     LLVMIntPredicate::LLVMIntULT => lhs.ult(&rhs),

@@ -320,7 +320,7 @@ enum TypedVariable<'a> {
     Struct(Vec<TypedVariable<'a>>),
 }
 
-impl<'a> fmt::Display for TypedVariable<'a> {
+impl fmt::Display for TypedVariable<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use TypedVariable::*;
 

@@ -17,7 +17,7 @@ use disarmv7::prelude::{
 };
 
 macro_rules! consume {
-    (($($id:ident$($(.$e:expr)+)?),*) from $name:ident) => {
+    (($($id:ident$($(.$e:expr_2021)+)?),*) from $name:ident) => {
         #[allow(unused_parens)]
         let ($($id),*) = {
             paste!(
@@ -654,7 +654,7 @@ impl Convert for (usize, V7Operation) {
                     }
                     ret
                 }
-                // TODO! Decide wether or not to use this 
+                // TODO! Decide whether or not to use this 
                 V7Operation::Dbg(_) => vec![],
                 V7Operation::Dmb(_) => {
                     tracing::warn!("DMB: This requires an exhaustive rewrite of the system to allow memory barriers");
@@ -718,7 +718,7 @@ impl Convert for (usize, V7Operation) {
                 // NOTE: This is used in un-analyzable code. If the barrier fails we cannot loop
                 // for ever.
                 V7Operation::Isb(_) => {
-                    tracing::warn!("Encounted ISB instruction. This cannot be analyzed, using a noop instead.");
+                    tracing::warn!("Encountered ISB instruction. This cannot be analyzed, using a noop instead.");
                     vec![]
                 }, //todo!("This needs to be revisited when the executor can handle it"),
                 V7Operation::It(it) => {
@@ -1574,7 +1574,7 @@ impl Convert for (usize, V7Operation) {
                                 // TODO! Add in DSP extension
                             }
                             if (((sysm>>3) & 0b11111) == 1 && (sysm & 0b100 == 0)) {
-                                // TODO! Need to track wether or not the mode is priv
+                                // TODO! Need to track whether or not the mode is priv
                             }
 
                             let primask = Register("PRIMASK");
@@ -2533,7 +2533,7 @@ impl Convert for (usize, V7Operation) {
                     .local_into();
                     let mut ret = vec![];
                     pseudo!(ret.extend[
-                            // Shift will allways be LSL on the v7
+                            // Shift will always be LSL on the v7
                             let offset = rm << shift_n;
                             let address = rn + offset;
                             LocalAddress("address", 32) = rt;
@@ -2587,7 +2587,7 @@ impl Convert for (usize, V7Operation) {
                     }
                     .local_into();
                     pseudo!([
-                            // Shift will allways be LSL on the v7
+                            // Shift will always be LSL on the v7
                             let offset = rm << shift_n;
                             let address = rn + offset;
                             LocalAddress("address", 8) = rt;

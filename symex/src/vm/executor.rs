@@ -308,14 +308,14 @@ impl<'vm> LLVMExecutor<'vm> {
         // Create new paths for all but one of the addresses.
         let mut addresses = self.state.memory.resolve_addresses(&address, 50)?;
         for address in addresses.iter().skip(1) {
-            let constraint = address._eq(&address);
+            let constraint = address.eq(&address);
             self.fork(constraint)?;
         }
 
         // If we received more than one possible address, then constrain our current
         // address.
         if addresses.len() > 1 {
-            let constraint = address._eq(&addresses[0]);
+            let constraint = address.eq(&addresses[0]);
             self.state.constraints.assert(&constraint);
         }
 
@@ -622,7 +622,7 @@ impl<'vm> LLVMExecutor<'vm> {
         // Replace the old value with the new value if the old value matches the
         // comparison value.
         let old_value = self.state.memory.read(&address, new_value.len())?;
-        let condition = old_value._eq(&cmp);
+        let condition = old_value.eq(&cmp);
         let result = condition.ite(&new_value, &old_value);
         self.state.memory.write(&address, result.clone())?;
 
@@ -794,8 +794,8 @@ impl<'vm> LLVMExecutor<'vm> {
     fn icmp(&mut self, i: &instruction::ICmp) -> Result<InstructionResult> {
         debug!("{i}");
         let f = |lhs: &DExpr, rhs: &DExpr| match i.predicate() {
-            LLVMIntPredicate::LLVMIntEQ => lhs._eq(&rhs),
-            LLVMIntPredicate::LLVMIntNE => lhs._ne(&rhs),
+            LLVMIntPredicate::LLVMIntEQ => lhs.eq(&rhs),
+            LLVMIntPredicate::LLVMIntNE => lhs.ne(&rhs),
             LLVMIntPredicate::LLVMIntUGT => lhs.ugt(&rhs),
             LLVMIntPredicate::LLVMIntUGE => lhs.ugte(&rhs),
             LLVMIntPredicate::LLVMIntULT => lhs.ult(&rhs),
@@ -967,9 +967,9 @@ impl<'vm> LLVMExecutor<'vm> {
             let path_condition = self.state.get_expr(&value).unwrap();
 
             // Build default condition.
-            default_cond = default_cond.and(&condition._ne(&path_condition));
+            default_cond = default_cond.and(&condition.ne(&path_condition));
 
-            let constraint = condition._eq(&path_condition);
+            let constraint = condition.eq(&path_condition);
             if self.state.constraints.is_sat_with_constraint(&constraint)? {
                 debug!("{i}: path {:?} possible", bb);
                 possible_paths.push((bb, constraint));

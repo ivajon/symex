@@ -200,7 +200,7 @@ impl ArmV6M {
                 ]
             }
             Operation::B { cond, imm } => {
-                let imm = imm + 2; // Beacause arm always adds as a 32 bit instruction.
+                let imm = imm + 2; // Because arm always adds as a 32 bit instruction.
 
                 vec![
                     GAOperation::Add {
@@ -345,7 +345,7 @@ impl ArmV6M {
             }
             Operation::CPS { im: _ } => {
                 // change processor state do nothig for now but should probably be modeled
-                // in armv6-m it is only used to enable disable interupts
+                // in armv6-m it is only used to enable disable interrupts
                 vec![]
             }
             Operation::CPY => {
@@ -1359,14 +1359,6 @@ impl ArmV6M {
                     GAOperation::SetZFlag(result),
                 ]
             }
-            // Operation::UDFT1 { imm: _ } => {
-            // generates a undefined exeption just panic for now
-            // unimplemented!()
-            // }
-            // Operation::UDFT2 { imm: _ } => {
-            // generates a undefined exeption just panic for now
-            // unimplemented!()
-            // }
             Operation::UXTB { m, d } => vec![GAOperation::ZeroExtend {
                 destination: arm_register_to_ga_operand(d),
                 operand: arm_register_to_ga_operand(m),
@@ -1395,7 +1387,7 @@ impl ArmV6M {
             instruction_size: instruction_width,
             operations,
             max_cycle: max_cycle_count,
-            // TODO! Add in checks for wether or not this is true
+            // TODO! Add in checks for whether or not this is true
             memory_access: false,
         }
     }
@@ -1438,8 +1430,8 @@ fn arm_special_register_to_operand(reg: &SpecialRegister) -> Operand {
     })
 }
 
-fn arm_cond_to_ga_cond(conditon: &ArmCodition) -> Condition {
-    match conditon {
+fn arm_cond_to_ga_cond(condition: &ArmCodition) -> Condition {
+    match condition {
         armv6_m_instruction_parser::conditions::Condition::EQ => Condition::EQ,
         armv6_m_instruction_parser::conditions::Condition::NE => Condition::NE,
         armv6_m_instruction_parser::conditions::Condition::CS => Condition::CS,

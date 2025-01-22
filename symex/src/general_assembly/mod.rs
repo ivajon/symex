@@ -26,7 +26,7 @@ pub enum GAError {
     #[error("Entry function {0} not found.")]
     EntryFunctionNotFound(String),
 
-    #[error("Writing to static memory not permited.")]
+    #[error("Writing to static memory not permitted.")]
     WritingToStaticMemoryProhibited,
 
     #[error("Solver error.")]
@@ -67,6 +67,6 @@ pub struct Config {
     pub max_memory_access_resolutions: usize,
 
     /// Maximum amount of concretizations for memmove, memcpy, memset and other
-    /// intrisic functions. Default is `100`.
+    /// intrinsic functions. Default is `100`.
     pub max_intrinsic_concretizations: usize,
 }

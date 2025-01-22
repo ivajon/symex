@@ -22,6 +22,7 @@ impl BoolectorIncrementalSolver {
         }
     }
 
+    #[allow(clippy::unused_self)]
     fn check_sat_result(&self, sat_result: SolverResult) -> Result<bool, SolverError> {
         match sat_result {
             SolverResult::Sat => Ok(true),
@@ -69,7 +70,7 @@ impl BoolectorIncrementalSolver {
     /// satisfiable.
     ///
     /// All asserts and assumes are implicitly combined with a boolean and.
-    /// Returns true or false, and [SolverError::Unknown] if the result
+    /// Returns true or false, and [`SolverError::Unknown`] if the result
     /// cannot be determined.
     pub fn is_sat(&self) -> Result<bool, SolverError> {
         let sat_result = self.ctx.sat();
@@ -95,6 +96,7 @@ impl BoolectorIncrementalSolver {
         self.is_sat()
     }
 
+    #[allow(clippy::unused_self)]
     /// Add the constraint to the solver.
     ///
     /// The passed constraint will be implicitly combined with the current state
@@ -122,7 +124,7 @@ impl BoolectorIncrementalSolver {
         self.push();
         self.ctx.set_opt(BtorOption::ModelGen(ModelGen::All));
 
-        let result = self.get_solutions(expr, upper_bound);
+        let result = self.get_solutions(&expr, upper_bound);
 
         // Restore solver to initial state.
         self.ctx.set_opt(BtorOption::ModelGen(ModelGen::Disabled));
@@ -140,14 +142,14 @@ impl BoolectorIncrementalSolver {
     ) -> Result<bool, SolverError> {
         // Add the constraint lhs != rhs and invert the results. The only way
         // for `lhs != rhs` to be `false` is that if they are equal.
-        let constraint = lhs._ne(rhs);
+        let constraint = lhs.ne(rhs);
         let result = self.is_sat_with_constraint(&constraint)?;
         Ok(!result)
     }
 
     /// Check if `lhs` and `rhs` can be equal under the current constraints.
     pub fn can_equal(&self, lhs: &BoolectorExpr, rhs: &BoolectorExpr) -> Result<bool, SolverError> {
-        self.is_sat_with_constraint(&lhs._eq(rhs))
+        self.is_sat_with_constraint(&lhs.eq(rhs))
     }
 
     /// Find solutions to `expr`.
@@ -170,7 +172,7 @@ impl BoolectorIncrementalSolver {
     // TODO: Commpare this against the other... Not sure why there are two.
     fn get_solutions(
         &self,
-        expr: BoolectorExpr,
+        expr: &BoolectorExpr,
         upper_bound: usize,
     ) -> Result<Solutions<BoolectorExpr>, SolverError> {
         let mut solutions = Vec::new();
@@ -184,16 +186,16 @@ impl BoolectorIncrementalSolver {
                 let solution = BoolectorExpr(BV::from_binary_str(self.ctx.clone(), solution));
 
                 // Constrain the next value to not be an already found solution.
-                self.assert(&expr._ne(&solution));
+                self.assert(&expr.ne(&solution));
 
                 solutions.push(solution);
             }
 
             let exists_more_solutions = self.is_sat()?;
-            match exists_more_solutions {
-                false => Ok(Solutions::Exactly(solutions)),
-                true => Ok(Solutions::AtLeast(solutions)),
+            if exists_more_solutions {
+                return Ok(Solutions::AtLeast(solutions));
             }
+            Ok(Solutions::Exactly(solutions))
         };
         let result = result();
 

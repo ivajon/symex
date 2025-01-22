@@ -311,15 +311,13 @@ impl<'vm, A: Arch> GAExecutor<'vm, A> {
                         })
                     }
 
-                    let constraint = address._eq(addr);
+                    let constraint = address.eq(addr);
                     self.fork(constraint)?;
                 }
 
                 // assert first address and return concrete
                 let concrete_address = &addresses[0];
-                self.state
-                    .constraints
-                    .assert(&address._eq(concrete_address));
+                self.state.constraints.assert(&address.eq(concrete_address));
                 Ok(concrete_address.get_constant().unwrap())
             }
         }
@@ -640,7 +638,7 @@ impl<'vm, A: Arch> GAExecutor<'vm, A> {
                         self.state.set_has_jumped();
                         Ok(dest_value)
                     }
-                    (false, true) => Ok(self.state.get_register("PC".to_owned())?), /* safe to asume PC exist */
+                    (false, true) => Ok(self.state.get_register("PC".to_owned())?), /* safe to assume PC exist */
                     (false, false) => Err(SolverError::Unsat),
                 }?;
 
@@ -660,7 +658,7 @@ impl<'vm, A: Arch> GAExecutor<'vm, A> {
             }
             Operation::SetZFlag(operand) => {
                 let value = self.get_operand_value(operand, local)?;
-                let result = value._eq(&self.state.ctx.zero(self.project.get_word_size()));
+                let result = value.eq(&self.state.ctx.zero(self.project.get_word_size()));
                 self.state.set_flag("Z".to_owned(), result);
             }
             Operation::SetCFlag {

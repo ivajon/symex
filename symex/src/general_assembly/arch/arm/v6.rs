@@ -1,4 +1,4 @@
-//! Defines armv6 hooks, instruction tranlsation and timings.
+//! Defines armv6 hooks, instruction translation and timings.
 
 pub mod decoder;
 pub mod timing;
@@ -68,7 +68,7 @@ impl Arch for ArmV6M {
         cfg.register_read_hooks.push(("PC+".to_owned(), read_pc));
         cfg.register_write_hooks.push(("PC+".to_owned(), write_pc));
 
-        // reset allways done
+        // reset always done
         let read_reset_done: MemoryReadHook<Self> = |state, _addr| {
             let value = state.ctx.from_u64(0xffff_ffff, 32);
             Ok(value)
@@ -87,7 +87,7 @@ impl Arch for ArmV6M {
         Ok(to_exec)
     }
 
-    fn discover(file: &File) -> Result<Option<Self>, ArchError> {
+    fn discover(file: &File<'_>) -> Result<Option<Self>, ArchError> {
         let f = match file {
             File::Elf32(f) => Ok(f),
             _ => Err(ArchError::IncorrectFileType),

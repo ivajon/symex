@@ -7,7 +7,7 @@
 //! architecture specific hooks.
 
 pub mod arm;
-/// Defines discovery behaviour for the architechtures.
+/// Defines discovery behaviour for the architectures.
 pub mod discover;
 use std::fmt::{Debug, Display};
 
@@ -53,7 +53,7 @@ pub enum ArchError {
     ImplementorStringError(&'static str),
 
     /// Thrown when something goes wrong during instruction parsing.
-    #[error("Error occured while parsing.")]
+    #[error("Error occurred while parsing.")]
     ParsingError(#[from] ParseError),
 }
 
@@ -76,15 +76,15 @@ pub enum ParseError {
     Unpredictable,
 
     /// Trying to access an invalid register.
-    #[error("Parser encounterd an invalid register.")]
+    #[error("Parser encountered an invalid register.")]
     InvalidRegister,
 
     /// Invalid condition code used.
-    #[error("Parser encounterd an invalid conditon.")]
+    #[error("Parser encountered an invalid condition.")]
     InvalidCondition,
 
     /// A generic parsing error.
-    #[error("Parser encounterd some unspecified error.")]
+    #[error("Parser encountered some unspecified error.")]
     Generic(&'static str),
 }
 
@@ -107,5 +107,5 @@ pub trait Arch: Debug + Display + Clone + Sized + 'static {
 
     /// Returns an instance of self if the file is defined for this
     /// specific architecture.
-    fn discover(file: &File) -> Result<Option<Self>, ArchError>;
+    fn discover(file: &File<'_>) -> Result<Option<Self>, ArchError>;
 }

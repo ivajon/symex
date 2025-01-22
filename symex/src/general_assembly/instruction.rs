@@ -29,7 +29,7 @@ pub struct Instruction<A: Arch> {
     /// instruction has executed but before the next instruction.
     pub max_cycle: CycleCount<A>,
 
-    /// Denotes wether or not the instruction required access to the underlying
+    /// Denotes whether or not the instruction required access to the underlying
     /// memory or not.
     pub memory_access: bool,
 }
