@@ -26,7 +26,7 @@ pub mod compare;
 pub mod test;
 pub mod timing;
 
-/// Type level denotation for the Armv7-EM ISA.
+/// Type level denotation for the ARMV7-EM ISA.
 #[derive(Debug, Default, Clone)]
 pub struct ArmV7EM {}
 
@@ -175,6 +175,8 @@ impl From<disarmv7::ParseError> for ParseError {
             disarmv7::ParseError::IncompleteProgram => ParseError::InsufficientInput,
             disarmv7::ParseError::InvalidRegister(_) => ParseError::InvalidRegister,
             disarmv7::ParseError::PartiallyParsed(error, _) => (*error).into(),
+            disarmv7::ParseError::InvalidFloatingPointRegister(_) => ParseError::InvalidRegister,
+            disarmv7::ParseError::InvalidRoundingMode(_) => ParseError::InvalidRoundingMode,
         }
     }
 }

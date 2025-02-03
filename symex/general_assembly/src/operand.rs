@@ -54,7 +54,7 @@ pub enum Operand {
 
     /// Representing the value stored in memory
     /// at the address stored in a register offset
-    /// by an constant value.
+    /// by a constant value.
     #[allow(missing_docs)]
     AddressWithOffset {
         address: DataWord,

@@ -83,6 +83,10 @@ pub enum ParseError {
     #[error("Parser encountered an invalid condition.")]
     InvalidCondition,
 
+    /// IEEE 754 invalid rounding mode requested.
+    #[error("Requested an invalid roudning mode.")]
+    InvalidRoundingMode,
+
     /// A generic parsing error.
     #[error("Parser encountered some unspecified error.")]
     Generic(&'static str),

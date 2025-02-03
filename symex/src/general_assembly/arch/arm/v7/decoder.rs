@@ -6,6 +6,7 @@ use general_assembly::{
     shift::Shift as GAShift,
 };
 use paste::paste;
+use tracing::warn;
 use transpiler::pseudo;
 
 use disarmv7::prelude::{
@@ -2649,7 +2650,7 @@ impl Convert for (usize, V7Operation) {
                             );
                     pseudo!([
                             let address = rn + imm;
-                            // TODO! Add in exculisve addresses here
+                            // TODO! Add in exclusive addresses here
                             LocalAddress(address,32) = rt;
                             rd = 0.local_into();
                     ])
@@ -2664,7 +2665,7 @@ impl Convert for (usize, V7Operation) {
                     let mut ret = vec![];
                     pseudo!(ret.extend[
                             let address = rn;
-                            // TODO! Add in exculisve addresses here
+                            // TODO! Add in exclusive addresses here
                             LocalAddress(address,8) = rt;
                             rd = 0.local_into();
                     ]);
@@ -3424,12 +3425,21 @@ impl Convert for (usize, V7Operation) {
                         rd = ZeroExtend(rotated<15:0>,32);
                     ])
                 }
-                //Here we have to assume intant return.
-                V7Operation::Wfe(_) => vec![],//todo!("This requires extensive system modelling"), //
-                //Here we have to assume intant return.
-                V7Operation::Wfi(_) => vec![],//todo!("This requires extensive system modelling"),
-                //Here we have to assume intant return.
-                V7Operation::Yield(_) => vec![],//todo!("This requires extensive system modelling"),
+                //Here we have to assume instant return.
+                V7Operation::Wfe(_) =>{
+                    warn!("WFE Encountered, this is not trivially modellable. Treating it as a NOP.");
+                    vec![]
+                },//todo!("This requires extensive system modeling"), //
+                //Here we have to assume instant return.
+                V7Operation::Wfi(_) => {
+                    warn!("WFI Encountered, this is not trivally modellable. Treating it as a NOP.");
+                    vec![]
+                },//todo!("This requires extensive system modeling"),
+                //Here we have to assume instant return.
+                V7Operation::Yield(_) => {
+                    warn!("YIELD Encountered, this is not modellable by default. Treating it as a NOP.");
+                    vec![]
+                },//todo!("This requires extensive system modeling"),
                 // I think that we should simply write Any here. i.e. they are noops.
                 V7Operation::Svc(_) => todo!(),
                 V7Operation::Stc(_) => todo!(),
@@ -3440,6 +3450,69 @@ impl Convert for (usize, V7Operation) {
                 V7Operation::Cdp(_) => todo!(),
                 V7Operation::LdcLiteral(_) => todo!(),
                 V7Operation::LdcImmediate(_) => todo!(),
+                V7Operation::VselF32(_vsel_f32) => todo!(),
+                V7Operation::VselF64(_vsel_f64) => todo!(),
+                V7Operation::VmlF32(_vml_f32) => todo!(),
+                V7Operation::VmlF64(_vml_f64) => todo!(),
+                V7Operation::VnmlF32(_vnml_f32) => todo!(),
+                V7Operation::VnmlF64(_vnml_f64) => todo!(),
+                V7Operation::VnmulF32(_vnmul_f32) => todo!(),
+                V7Operation::VnmulF64(_vnmul_f64) => todo!(),
+                V7Operation::VmulF32(_vmul_f32) => todo!(),
+                V7Operation::VmulF64(_vmul_f64) => todo!(),
+                V7Operation::VaddF32(_vadd_f32) => todo!(),
+                V7Operation::VaddF64(_vadd_f64) => todo!(),
+                V7Operation::VsubF32(_vsub_f32) => todo!(),
+                V7Operation::VsubF64(_vsub_f64) => todo!(),
+                V7Operation::VdivF32(_vdiv_f32) => todo!(),
+                V7Operation::VdivF64(_vdiv_f64) => todo!(),
+                V7Operation::VmaxF32(_vmax_f32) => todo!(),
+                V7Operation::VmaxF64(_vmax_f64) => todo!(),
+                V7Operation::VminF32(_vmin_f32) => todo!(),
+                V7Operation::VminF64(_vmin_f64) => todo!(),
+                V7Operation::VmovImmediateF32(_vmov_immediate_f32) => todo!(),
+                V7Operation::VmovImmediateF64(_vmov_immediate_f64) => todo!(),
+                V7Operation::VmovRegisterF32(_vmov_register_f32) => todo!(),
+                V7Operation::VmovRegisterF64(_vmov_register_f64) => todo!(),
+                V7Operation::VabsF32(_vabs_f32) => todo!(),
+                V7Operation::VabsF64(_vabs_f64) => todo!(),
+                V7Operation::VnegF32(_vneg_f32) => todo!(),
+                V7Operation::VnegF64(_vneg_f64) => todo!(),
+                V7Operation::VsqrtF32(_vsqrt_f32) => todo!(),
+                V7Operation::VsqrtF64(_vsqrt_f64) => todo!(),
+                V7Operation::VcvtF32(_vcvt_f32) => todo!(),
+                V7Operation::VcvtF64(_vcvt_f64) => todo!(),
+                V7Operation::VcmpF32(_vcmp_f32) => todo!(),
+                V7Operation::VcmpF64(_vcmp_f64) => todo!(),
+                V7Operation::VcmpZeroF32(_vcmp_zero_f32) => todo!(),
+                V7Operation::VcmpZeroF64(_vcmp_zero_f64) => todo!(),
+                V7Operation::VrintF32(_vrint_f32) => todo!(),
+                V7Operation::VrintF64(_vrint_f64) => todo!(),
+                V7Operation::VcvtF64F32(_vcvt_f64_f32) => todo!(),
+                V7Operation::VcvtF32F64(_vcvt_f32_f64) => todo!(),
+                V7Operation::Vcvt(_vcvt) => todo!(),
+                V7Operation::VrintCustomRoundingF32(_vrint_custom_rounding_f32) => todo!(),
+                V7Operation::VrintCustomRoundingF64(_vrint_custom_rounding_f64) => todo!(),
+                V7Operation::VcvtCustomRoundingIntF32(_vcvt_custom_rounding_int_f32) => todo!(),
+                V7Operation::VcvtCustomRoundingIntF64(_vcvt_custom_rounding_int_f64) => todo!(),
+                V7Operation::VStmF32(_vstm_f32) => todo!(),
+                V7Operation::VStmF64(_vstm_f64) => todo!(),
+                V7Operation::VStrF32(_vstr_f32) => todo!(),
+                V7Operation::VStrF64(_vstr_f64) => todo!(),
+                V7Operation::VPushF32(_vpush_f32) => todo!(),
+                V7Operation::VPushF64(_vpush_f64) => todo!(),
+                V7Operation::VLdrF32(_vldr_f32) => todo!(),
+                V7Operation::VLdrF64(_vldr_f64) => todo!(),
+                V7Operation::VPopF32(_vpop_f32) => todo!(),
+                V7Operation::VPopF64(_vpop_f64) => todo!(),
+                V7Operation::VLdmF32(_vldm_f32) => todo!(),
+                V7Operation::VLdmF64(_vldm_f64) => todo!(),
+                V7Operation::VmoveF32(_vmove_f32) => todo!(),
+                V7Operation::VmoveHalfWord(_vmove_half_word) => todo!(),
+                V7Operation::Vmsr(_vmsr) => todo!(),
+                V7Operation::Vmrs(_vmrs) => todo!(),
+                V7Operation::VmoveDoubleF32(_vmove_double_f32) => todo!(),
+                V7Operation::VmoveF64(_vmove_f64) => todo!(),
             }
         }
     }

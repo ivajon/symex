@@ -20,7 +20,7 @@ rand = "0.8.5"
 object = "0.32.1"
 
 armv6-m-instruction-parser = "0.3.0-rc1"
-disarmv7 = "0.0.2"
+disarmv7 = {path = "../../disarmv7/" }
 transpiler = { path = "./transpiler" }
 gimli = "0.28.0"
 regex = "1.10.2"
