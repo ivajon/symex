@@ -5,10 +5,13 @@ use std::collections::{HashMap, VecDeque};
 use general_assembly::prelude::{Condition, DataWord};
 use tracing::{debug, trace};
 
-use super::instruction::Instruction;
+use super::{
+    instruction::Instruction,
+    vm::{Composition, StateContainer},
+};
 use crate::{
     arch::Arch,
-    elf_util::{ExpressionType, Variable},
+    elf_util::{ExpressionType, Variable, Variable2},
     memory::ArrayMemory,
     project::{self, PCHook, Project, ProjectError},
     smt::{DContext, DExpr, DSolver},
@@ -26,6 +29,27 @@ pub struct ContinueInsideInstruction<A: Arch> {
     pub instruction: Instruction<A>,
     pub index: usize,
     pub local: HashMap<String, DExpr>,
+}
+
+#[derive(Clone, Debug)]
+pub struct GAState2<C: Composition> {
+    pub project: &'static Project<<C::StateContainer as StateContainer>::Architecture>,
+    // TODO: Should this really be here still?
+    pub constraints: C::SMT,
+    // TODO: These should likely be managed by the memory and collected at the end of execution.
+    pub marked_symbolic: Vec<Variable2<C::SMT>>,
+    pub count_cycles: bool,
+    pub cycle_count: usize,
+    pub cycle_laps: Vec<(usize, String)>,
+    pub last_instruction: Option<Instruction<<C::StateContainer as StateContainer>::Architecture>>,
+    pub last_pc: u64,
+    pub continue_in_instruction:
+        Option<ContinueInsideInstruction<<C::StateContainer as StateContainer>::Architecture>>,
+    pub current_instruction: Option<<C::StateContainer as StateContainer>::Architecture>,
+    pub state: C::StateContainer,
+    instruction_counter: usize,
+    has_jumped: bool,
+    instruction_conditions: VecDeque<Condition>,
 }
 
 #[derive(Clone, Debug)]

@@ -19,6 +19,7 @@
     rustdoc::missing_crate_level_docs,
     tail_expr_drop_order
 )]
+#![feature(non_null_from_ref)]
 
 use arch::ArchError;
 use memory::MemoryError;
@@ -29,11 +30,13 @@ pub mod arch;
 pub mod elf_util;
 pub mod executor;
 pub mod initiation;
+pub mod manager;
 pub mod memory;
 pub mod path_selection;
 pub mod project;
 pub mod run_elf;
 pub mod smt;
+//pub mod util;
 
 pub type Result<T> = std::result::Result<T, GAError>;
 

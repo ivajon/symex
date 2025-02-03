@@ -6,7 +6,12 @@ use std::iter::Peekable;
 use colored::*;
 use indenter::indented;
 
-use crate::{arch::Arch, executor::state::GAState, smt::DExpr, GAError};
+use crate::{
+    arch::Arch,
+    executor::state::GAState,
+    smt::{DExpr, SmtSolver},
+    GAError,
+};
 
 /// Result for a single path of execution.
 ///
@@ -200,6 +205,25 @@ pub struct Variable {
     /// should be invoked before presenting to the end-user. This allows to
     /// skip a (possible expensive) solve if not required.
     pub value: DExpr,
+
+    /// Simple representation of the variable.
+    pub ty: ExpressionType,
+}
+
+/// Symbolic variable that should be able to be displayed to an end user.
+///
+/// Variable can be things such as inputs, variables marked as symbolic and
+/// outputs. To show this to an end user, the variable must have been solved
+/// before trying to show it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Variable2<SMT: SmtSolver> {
+    /// `name` is the source name of the variable, if it exists.
+    pub name: Option<String>,
+
+    /// Expression of the variable. This can be multiple values, and the solver
+    /// should be invoked before presenting to the end-user. This allows to
+    /// skip a (possible expensive) solve if not required.
+    pub value: SMT::Expression,
 
     /// Simple representation of the variable.
     pub ty: ExpressionType,

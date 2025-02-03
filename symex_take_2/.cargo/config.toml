@@ -1,0 +1,7 @@
+
+[build]
+jobs=24
+
+[env]
+RUST_TEST_THREADS="24"
+RUSTFLAGS="-Zthreads=24"
