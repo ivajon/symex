@@ -6,7 +6,6 @@ use crate::{
     smt::{MemoryError, SmtExpr, SmtMap, SmtSolver},
     Composition,
     Result,
-    WordSize,
 };
 
 /// Represents a generic state container.
@@ -27,7 +26,8 @@ pub enum PCHook2<C: Composition> {
     Suppress,
 }
 
-struct HookContainer<C: Composition> {
+#[derive(Debug, Clone)]
+pub struct HookContainer<C: Composition> {
     register_read_hook: HashMap<
         String,
         fn(state: &mut GAState2<C>) -> super::Result<<C::SMT as SmtSolver>::Expression>,
@@ -63,7 +63,7 @@ struct HookContainer<C: Composition> {
 }
 
 pub struct Reader<'a, C: Composition> {
-    memory: &'a <C::SMT as SmtSolver>::Memory,
+    memory: &'a mut <C::SMT as SmtSolver>::Memory,
     container: &'a mut HookContainer<C>,
 }
 
@@ -73,18 +73,31 @@ pub struct Writer<'a, C: Composition> {
 }
 
 impl<C: Composition> HookContainer<C> {
-    fn reader<'a>(&'a mut self, memory: &'a <C::SMT as SmtSolver>::Memory) -> Reader<'a, C> {
+    pub fn reader<'a>(
+        &'a mut self,
+        memory: &'a mut <C::SMT as SmtSolver>::Memory,
+    ) -> Reader<'a, C> {
         Reader {
             memory,
             container: self,
         }
     }
 
-    fn writer<'a>(&'a mut self, memory: &'a mut <C::SMT as SmtSolver>::Memory) -> Writer<'a, C> {
+    pub fn writer<'a>(
+        &'a mut self,
+        memory: &'a mut <C::SMT as SmtSolver>::Memory,
+    ) -> Writer<'a, C> {
         Writer {
             memory,
             container: self,
         }
+    }
+
+    pub fn get_pc_hooks(&self, value: u32) -> ResultOrHook<u32, &PCHook2<C>> {
+        if let Some(pchook) = self.pc_hook.get(&(value as u64)) {
+            return ResultOrHook::Hook(pchook);
+        }
+        ResultOrHook::Result(value)
     }
 }
 
@@ -95,7 +108,7 @@ pub enum ResultOrHook<A: Sized, B: Sized> {
 }
 
 impl<'a, C: Composition> Reader<'a, C> {
-    fn read_memory(
+    pub fn read_memory(
         &mut self,
         addr: <C::SMT as SmtSolver>::Expression,
         size: usize,
@@ -135,10 +148,9 @@ impl<'a, C: Composition> Reader<'a, C> {
         ResultOrHook::Result(self.memory.get(&addr, size))
     }
 
-    fn read_register(
+    pub fn read_register(
         &mut self,
         id: &String,
-        size: usize,
     ) -> ResultOrHook<
         std::result::Result<<C::SMT as SmtSolver>::Expression, MemoryError>,
         fn(state: &mut GAState2<C>) -> Result<<C::SMT as SmtSolver>::Expression>,
@@ -147,21 +159,18 @@ impl<'a, C: Composition> Reader<'a, C> {
             return ResultOrHook::Hook(hook.clone());
         }
 
-        ResultOrHook::Result(self.memory.get_register(id, size))
+        ResultOrHook::Result(self.memory.get_register(id))
     }
 
-    fn read_pc(
+    pub fn read_pc(
         &mut self,
-    ) -> ResultOrHook<
-        std::result::Result<<C::SMT as SmtSolver>::Expression, MemoryError>,
-        fn(state: &mut GAState2<C>) -> Result<<C::SMT as SmtSolver>::Expression>,
-    > {
-        ResultOrHook::Result(self.memory.get_pc())
+    ) -> std::result::Result<<C::SMT as SmtSolver>::Expression, MemoryError> {
+        self.memory.get_pc()
     }
 }
 
 impl<'a, C: Composition> Writer<'a, C> {
-    fn write_memory(
+    pub fn write_memory(
         &mut self,
         addr: <C::SMT as SmtSolver>::Expression,
         value: <C::SMT as SmtSolver>::Expression,
@@ -201,7 +210,7 @@ impl<'a, C: Composition> Writer<'a, C> {
         ResultOrHook::Result(self.memory.set(&addr, value))
     }
 
-    fn write_register(
+    pub fn write_register(
         &mut self,
         id: &String,
         value: &<C::SMT as SmtSolver>::Expression,
@@ -213,16 +222,10 @@ impl<'a, C: Composition> Writer<'a, C> {
             return ResultOrHook::Hook(hook.clone());
         }
 
-        ResultOrHook::Result(self.memory.set_register(id, value))
+        ResultOrHook::Result(self.memory.set_register(id, value.clone()))
     }
 
-    fn write_pc(
-        &mut self,
-        value: u32,
-    ) -> ResultOrHook<
-        std::result::Result<(), MemoryError>,
-        fn(&mut GAState2<C>, <<C as Composition>::SMT as SmtSolver>::Expression) -> Result<()>,
-    > {
-        ResultOrHook::Result(self.memory.set_pc(&value))
+    pub fn write_pc(&mut self, value: u32) -> std::result::Result<(), MemoryError> {
+        self.memory.set_pc(value)
     }
 }

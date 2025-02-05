@@ -15,7 +15,14 @@ use tracing::trace;
 
 use super::{MemoryError, BITS_IN_BYTE};
 use crate::{
-    smt::{DArray, DContext, DExpr, SmtMap, SolverError},
+    smt::{
+        smt_boolector::{Boolector, BoolectorSolverContext},
+        DArray,
+        DContext,
+        DExpr,
+        SmtMap,
+        SolverError,
+    },
     Endianness,
     WordSize,
 };
@@ -151,6 +158,7 @@ impl ArrayMemory {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct BoolectorMemory {
     ram: ArrayMemory,
     register_file: HashMap<String, DExpr>,
@@ -158,12 +166,51 @@ pub struct BoolectorMemory {
     variables: HashMap<String, DExpr>,
     // TODO: Expose these.
     locals: HashMap<String, DExpr>,
+    word_size: usize,
     pc: u64,
 }
 
 impl SmtMap for BoolectorMemory {
     type Idx = DExpr;
     type ReturnValue = DExpr;
+    type SMT = Boolector;
+
+    fn new(
+        smt: Self::SMT,
+        word_size: usize,
+        endianness: Endianness,
+    ) -> Result<Self, crate::GAError> {
+        let ctx = Box::new(crate::smt::smt_boolector::BoolectorSolverContext {
+            ctx: smt.ctx.clone(),
+        });
+        let ctx = Box::leak::<'static>(ctx);
+        let ram = {
+            let memory = DArray::new(
+                &crate::smt::smt_boolector::BoolectorSolverContext {
+                    ctx: smt.ctx.clone(),
+                },
+                word_size,
+                BITS_IN_BYTE as usize,
+                "memory",
+            );
+
+            ArrayMemory {
+                ctx,
+                ptr_size: word_size as u32,
+                memory,
+                endianness,
+            }
+        };
+        Ok(Self {
+            ram,
+            register_file: HashMap::new(),
+            flags: HashMap::new(),
+            variables: HashMap::new(),
+            locals: HashMap::new(),
+            word_size,
+            pc: 0,
+        })
+    }
 
     fn get(
         &self,
@@ -199,12 +246,14 @@ impl SmtMap for BoolectorMemory {
         Ok(())
     }
 
-    fn get_flag(&self, idx: &str) -> Result<Self::ReturnValue, crate::smt::MemoryError> {
-        Ok(self
+    fn get_flag(&mut self, idx: &str) -> Result<Self::ReturnValue, crate::smt::MemoryError> {
+        let ret = self
             .flags
             .get(idx)
-            .unwrap_or(&self.ram.ctx.from_u64(0, 1))
-            .clone())
+            .cloned()
+            .unwrap_or(self.ram.ctx.unconstrained(1, idx));
+        self.flags.insert(idx.to_string(), ret.clone());
+        Ok(ret)
     }
 
     fn set_register(
@@ -216,13 +265,23 @@ impl SmtMap for BoolectorMemory {
         Ok(())
     }
 
-    fn get_register(&self, idx: &str) -> Result<Self::ReturnValue, crate::smt::MemoryError> {
-        // TODO: Set this to
-        Ok(self
+    fn get_register(&mut self, idx: &str) -> Result<Self::ReturnValue, crate::smt::MemoryError> {
+        let ret = self
             .register_file
             .get(idx)
-            .unwrap_or(&self.ram.ctx.from_u64(0, 1))
-            .clone())
+            .cloned()
+            .unwrap_or(self.ram.ctx.unconstrained(self.word_size as u32, idx));
+        // Ensure that any read from the same register returns the
+        self.register_file.insert(idx.to_string(), ret.clone());
+        Ok(ret)
+    }
+
+    fn from_u64(&self, value: u64, size: usize) -> Self::ReturnValue {
+        self.ram.ctx.from_u64(value, size as u32)
+    }
+
+    fn from_bool(&self, value: bool) -> Self::ReturnValue {
+        self.ram.ctx.from_bool(value)
     }
 }
 

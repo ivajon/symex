@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use boolector::SolverResult;
 use general_assembly::shift::Shift;
 
-use crate::{memory::MemoryError as MemoryFileError, WordSize};
+use crate::{memory::MemoryError as MemoryFileError, Endianness, GAError, WordSize};
 
 pub mod smt_boolector;
 
@@ -42,21 +42,25 @@ pub enum MemoryError {
     PcNonDetmerinistic,
 }
 
-pub trait SmtMap {
+pub trait SmtMap: Debug + Clone {
     type Idx: Sized;
     type ReturnValue: SmtExpr;
+    type SMT: SmtSolver;
+    #[must_use]
+    fn new(smt: Self::SMT, word_size: usize, endianness: Endianness) -> Result<Self, GAError>;
+
     #[must_use]
     fn get(&self, idx: &Self::Idx, size: usize) -> Result<Self::ReturnValue, MemoryError>;
     #[must_use]
     fn set(&mut self, idx: &Self::Idx, value: Self::ReturnValue) -> Result<(), MemoryError>;
 
     #[must_use]
-    fn get_flag(&self, idx: &str) -> Result<Self::ReturnValue, MemoryError>;
+    fn get_flag(&mut self, idx: &str) -> Result<Self::ReturnValue, MemoryError>;
     #[must_use]
     fn set_flag(&mut self, idx: &str, value: Self::ReturnValue) -> Result<(), MemoryError>;
 
     #[must_use]
-    fn get_register(&self, idx: &str) -> Result<Self::ReturnValue, MemoryError>;
+    fn get_register(&mut self, idx: &str) -> Result<Self::ReturnValue, MemoryError>;
     #[must_use]
     fn set_register(&mut self, idx: &str, value: Self::ReturnValue) -> Result<(), MemoryError>;
 
@@ -65,12 +69,18 @@ pub trait SmtMap {
     fn get_pc(&self) -> Result<Self::ReturnValue, MemoryError>;
     #[must_use]
     fn set_pc(&mut self, value: u32) -> Result<(), MemoryError>;
+
+    #[must_use]
+    fn from_u64(&self, value: u64, size: usize) -> Self::ReturnValue;
+
+    #[must_use]
+    fn from_bool(&self, value: bool) -> Self::ReturnValue;
 }
 
 /// Defines a type that can be used as an SMT solver.
-pub trait SmtSolver {
+pub trait SmtSolver: Debug + Clone {
     type Expression: SmtExpr;
-    type Memory: SmtMap<ReturnValue = Self::Expression, Idx = Self::Expression>;
+    type Memory: SmtMap<ReturnValue = Self::Expression, Idx = Self::Expression, SMT = Self>;
 
     #[must_use]
     /// Borrows the underlying memory.

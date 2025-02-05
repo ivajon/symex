@@ -12,10 +12,14 @@ use tracing::{debug, trace};
 
 use crate::{
     arch::{ArchError, Architecture},
-    executor::{instruction::Instruction, state::GAState},
+    executor::{
+        instruction::{Instruction, Instruction2},
+        state::{GAState, GAState2},
+    },
     initiation::run_config::RunConfig,
     memory::MemoryError,
     smt::DExpr,
+    Composition,
     Endianness,
     Result as SuperResult,
     WordSize,
@@ -371,11 +375,34 @@ impl<A: Architecture> Project<A> {
         }
     }
 
+    /// Get the instruction at an address
+    pub fn get_instruction2<C: Composition>(
+        &self,
+        address: u64,
+        state: &GAState2<C>,
+    ) -> Result<Instruction2<C>> {
+        trace!("Reading instruction from address: {:#010X}", address);
+        match self.get_raw_word(address)? {
+            RawDataWord::Word64(d) => self.instruction_from_array_ptr2(&d, state),
+            RawDataWord::Word32(d) => self.instruction_from_array_ptr2(&d, state),
+            RawDataWord::Word16(d) => self.instruction_from_array_ptr2(&d, state),
+            RawDataWord::Word8(_) => todo!(),
+        }
+    }
+
     fn instruction_from_array_ptr(
         &self,
         data: &[u8],
         state: &GAState<A>,
     ) -> Result<Instruction<A>> {
+        state.instruction_from_array_ptr(data)
+    }
+
+    fn instruction_from_array_ptr2<C: Composition>(
+        &self,
+        data: &[u8],
+        state: &GAState2<C>,
+    ) -> Result<Instruction2<C>> {
         state.instruction_from_array_ptr(data)
     }
 
