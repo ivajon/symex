@@ -12,18 +12,19 @@ use tracing::{debug, trace};
 use vm::VM;
 
 use crate::{
-    arch::Arch,
+    arch::Architecture,
     path_selection::Path,
     project::{PCHook, Project},
     smt::{smt_boolector::BoolectorSolverContext, DExpr, SolverError},
     Result,
 };
 
+pub mod hooks;
 pub mod instruction;
 pub mod state;
 pub mod vm;
 
-pub struct GAExecutor<'vm, A: Arch> {
+pub struct GAExecutor<'vm, A: Architecture> {
     pub vm: &'vm mut VM<A>,
     pub state: GAState<A>,
     pub project: &'static Project<A>,
@@ -44,7 +45,7 @@ struct AddWithCarryResult {
     result: DExpr,
 }
 
-impl<'vm, A: Arch> GAExecutor<'vm, A> {
+impl<'vm, A: Architecture> GAExecutor<'vm, A> {
     /// Construct an executor from a state.
     pub fn from_state(state: GAState<A>, vm: &'vm mut VM<A>, project: &'static Project<A>) -> Self {
         Self {
@@ -961,8 +962,8 @@ fn count_leading_zeroes(input: &DExpr, ctx: &BoolectorSolverContext, word_size: 
     count
 }
 
-/// Does a add with carry and returns result, carry out and overflow like a hw
-/// adder.
+/// Does an add with carry and returns result, carry out and overflow like a
+/// hardware adder.
 fn add_with_carry(
     op1: &DExpr,
     op2: &DExpr,

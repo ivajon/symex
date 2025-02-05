@@ -5,7 +5,7 @@ use regex::Regex;
 use tracing::{debug, trace};
 
 use crate::{
-    arch::{Arch, SupportedArchitechture},
+    arch::{Architecture, SupportedArchitechture},
     elf_util::{ErrorReason, PathStatus, VisualPathResult},
     executor::{state::GAState, vm::VM, PathResult},
     initiation::run_config::RunConfig,
@@ -14,7 +14,7 @@ use crate::{
     GAError,
 };
 
-fn add_architecture_independent_hooks<A: Arch>(cfg: &mut RunConfig<A>) {
+fn add_architecture_independent_hooks<A: Architecture>(cfg: &mut RunConfig<A>) {
     // intrinsic functions
     let start_cyclecount = |state: &mut GAState<A>| {
         state.cycle_count = 0;
@@ -108,7 +108,7 @@ pub fn run_elf<P: AsRef<Path>>(
     let arch = SupportedArchitechture::discover(&obj_file)?;
 
     // TODO: Look in to other options for dispatching these without dynamic
-    // dispatch..
+    // dispatch.
     match arch {
         SupportedArchitechture::ArmV7EM(v7) => {
             // Run the paths with architecture specific data.
@@ -147,7 +147,7 @@ pub fn run_elf<P: AsRef<Path>>(
 /// # Panics
 ///
 /// This function panics if the specified file does not exist.
-pub fn run_elf_configured<A: Arch>(
+pub fn run_elf_configured<A: Architecture>(
     path: &str,
     function: &str,
     architecture: A,
@@ -180,7 +180,7 @@ pub fn run_elf_configured<A: Arch>(
 }
 
 /// Runs all paths in the vm
-fn run_elf_paths<A: Arch>(
+fn run_elf_paths<A: Architecture>(
     vm: &mut VM<A>,
     cfg: &RunConfig<A>,
 ) -> Result<Vec<VisualPathResult>, GAError> {

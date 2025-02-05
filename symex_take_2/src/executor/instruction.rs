@@ -2,11 +2,11 @@
 
 use general_assembly::operation::Operation;
 
-use crate::{arch::Arch, executor::state::GAState};
+use crate::{arch::Architecture, executor::state::GAState};
 
 /// Representing a cycle count for an instruction.
 #[derive(Debug, Clone)]
-pub enum CycleCount<A: Arch> {
+pub enum CycleCount<A: Architecture> {
     /// Cycle count is a pre-calculated value
     Value(usize),
 
@@ -16,7 +16,7 @@ pub enum CycleCount<A: Arch> {
 
 /// Represents a general assembly instruction.
 #[derive(Debug, Clone)]
-pub struct Instruction<A: Arch> {
+pub struct Instruction<A: Architecture> {
     /// The size of the original machine instruction in number of bits.
     pub instruction_size: u32,
 

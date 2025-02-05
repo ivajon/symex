@@ -7,7 +7,7 @@ use colored::*;
 use indenter::indented;
 
 use crate::{
-    arch::Arch,
+    arch::Architecture,
     executor::state::GAState,
     smt::{DExpr, SmtSolver},
     GAError,
@@ -50,7 +50,10 @@ pub struct VisualPathResult {
     pub initial_sp: u64,
 }
 
-fn elf_get_values<'a, I>(vars: I, state: &GAState<impl Arch>) -> Result<Vec<Variable>, GAError>
+fn elf_get_values<'a, I>(
+    vars: I,
+    state: &GAState<impl Architecture>,
+) -> Result<Vec<Variable>, GAError>
 where
     I: Iterator<Item = &'a Variable>,
 {
@@ -71,7 +74,7 @@ where
 impl VisualPathResult {
     /// Creates a result from a state.
     pub fn from_state(
-        state: GAState<impl Arch>,
+        state: GAState<impl Architecture>,
         path_num: usize,
         result: PathStatus,
     ) -> Result<Self, GAError> {

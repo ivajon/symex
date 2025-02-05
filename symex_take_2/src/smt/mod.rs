@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use boolector::SolverResult;
 use general_assembly::shift::Shift;
 
-use crate::WordSize;
+use crate::{memory::MemoryError as MemoryFileError, WordSize};
 
 pub mod smt_boolector;
 
@@ -35,13 +35,8 @@ pub enum Solutions<E> {
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum MemoryError {
-    /// Address out of bounds for memory.
-    #[error("Address out of bounds.")]
-    AddressOutOfBound,
-
-    /// Exceeded the passed maximum number of solutions.
-    #[error("Address non deterministic.")]
-    TooManySolutions,
+    #[error("Memory file encountered error")]
+    MemoryFileError(MemoryFileError),
 
     #[error("Program counter is non deterministic.")]
     PcNonDetmerinistic,
@@ -51,25 +46,25 @@ pub trait SmtMap {
     type Idx: Sized;
     type ReturnValue: SmtExpr;
     #[must_use]
-    fn get(&self, idx: &Self::Idx, size: WordSize) -> Result<Self::ReturnValue, MemoryError>;
+    fn get(&self, idx: &Self::Idx, size: usize) -> Result<Self::ReturnValue, MemoryError>;
     #[must_use]
-    fn set(&mut self, idx: &Self::Idx, value: &Self::Idx) -> Result<(), MemoryError>;
+    fn set(&mut self, idx: &Self::Idx, value: Self::ReturnValue) -> Result<(), MemoryError>;
 
     #[must_use]
-    fn get_flag(&self, idx: &str, size: WordSize) -> Result<Self::ReturnValue, MemoryError>;
+    fn get_flag(&self, idx: &str) -> Result<Self::ReturnValue, MemoryError>;
     #[must_use]
-    fn set_flag(&mut self, idx: &str, value: &Self::Idx) -> Result<(), MemoryError>;
+    fn set_flag(&mut self, idx: &str, value: Self::ReturnValue) -> Result<(), MemoryError>;
 
     #[must_use]
-    fn get_register(&self, idx: &str, size: WordSize) -> Result<Self::ReturnValue, MemoryError>;
+    fn get_register(&self, idx: &str) -> Result<Self::ReturnValue, MemoryError>;
     #[must_use]
-    fn set_register(&mut self, idx: &str, value: &Self::Idx) -> Result<(), MemoryError>;
+    fn set_register(&mut self, idx: &str, value: Self::ReturnValue) -> Result<(), MemoryError>;
 
     // NOTE: Might be a poor assumption that the word size for PC is 32 bit.
     #[must_use]
     fn get_pc(&self) -> Result<Self::ReturnValue, MemoryError>;
     #[must_use]
-    fn set_pc(&mut self, value: &u32) -> Result<(), MemoryError>;
+    fn set_pc(&mut self, value: u32) -> Result<(), MemoryError>;
 }
 
 /// Defines a type that can be used as an SMT solver.
@@ -310,8 +305,6 @@ pub trait SmtExpr: Debug + Clone {
     fn get_constant_bool(&self) -> Option<bool>;
 
     fn to_binary_string(&self) -> String;
-
-    fn get_solver(&self) -> impl SmtSolver<Expression = Self>;
 
     fn replace_part(&self, start_idx: u32, replace_with: Self) -> Self;
 

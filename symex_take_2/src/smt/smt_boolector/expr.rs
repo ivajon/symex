@@ -258,7 +258,7 @@ impl BoolectorExpr {
         }
     }
 
-    fn get_ctx(&self) -> BoolectorSolverContext {
+    pub fn get_ctx(&self) -> BoolectorSolverContext {
         let ctx = self.0.get_btor();
         BoolectorSolverContext { ctx }
     }

@@ -2,9 +2,9 @@ use object::{Architecture, File, Object};
 
 use super::{
     arm::{v6::ArmV6M, v7::ArmV7EM},
-    Arch,
     ArchError,
     SupportedArchitechture,
+    SupportedArchitecture,
 };
 
 impl SupportedArchitechture {

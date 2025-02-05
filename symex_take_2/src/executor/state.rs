@@ -5,27 +5,25 @@ use std::collections::{HashMap, VecDeque};
 use general_assembly::prelude::{Condition, DataWord};
 use tracing::{debug, trace};
 
-use super::{
-    instruction::Instruction,
-    vm::{Composition, StateContainer},
-};
+use super::{super::executor::hooks::StateContainer, instruction::Instruction};
 use crate::{
-    arch::Arch,
-    elf_util::{ExpressionType, Variable, Variable2},
+    arch::Architecture,
+    elf_util::{ExpressionType, Variable},
     memory::ArrayMemory,
     project::{self, PCHook, Project, ProjectError},
     smt::{DContext, DExpr, DSolver},
+    Composition,
     GAError,
     Result,
 };
 
-pub enum HookOrInstruction<'a, A: Arch> {
+pub enum HookOrInstruction<'a, A: Architecture> {
     PcHook(&'a PCHook<A>),
     Instruction(Instruction<A>),
 }
 
 #[derive(Clone, Debug)]
-pub struct ContinueInsideInstruction<A: Arch> {
+pub struct ContinueInsideInstruction<A: Architecture> {
     pub instruction: Instruction<A>,
     pub index: usize,
     pub local: HashMap<String, DExpr>,
@@ -34,10 +32,7 @@ pub struct ContinueInsideInstruction<A: Arch> {
 #[derive(Clone, Debug)]
 pub struct GAState2<C: Composition> {
     pub project: &'static Project<<C::StateContainer as StateContainer>::Architecture>,
-    // TODO: Should this really be here still?
     pub constraints: C::SMT,
-    // TODO: These should likely be managed by the memory and collected at the end of execution.
-    pub marked_symbolic: Vec<Variable2<C::SMT>>,
     pub count_cycles: bool,
     pub cycle_count: usize,
     pub cycle_laps: Vec<(usize, String)>,
@@ -53,7 +48,7 @@ pub struct GAState2<C: Composition> {
 }
 
 #[derive(Clone, Debug)]
-pub struct GAState<A: Arch> {
+pub struct GAState<A: Architecture> {
     pub project: &'static Project<A>,
     pub ctx: &'static DContext,
     pub constraints: DSolver,
@@ -76,7 +71,7 @@ pub struct GAState<A: Arch> {
     instruction_conditions: VecDeque<Condition>,
 }
 
-impl<A: Arch> GAState<A> {
+impl<A: Architecture> GAState<A> {
     /// Create a new state.
     pub fn new(
         ctx: &'static DContext,

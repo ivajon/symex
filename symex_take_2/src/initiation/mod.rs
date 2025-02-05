@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use object::{File, ReadRef};
 
-use crate::arch::Arch;
+use crate::arch::Architecture;
 
 pub mod run_config;
 
@@ -11,7 +11,7 @@ pub struct SymexConfigurator<const PATH_SPECIFIED: bool> {
     path: Option<PathBuf>,
 }
 
-pub struct SymexConfiguration<A: Arch> {
+pub struct SymexConfiguration<A: Architecture> {
     path: PathBuf,
     arch: A,
 }

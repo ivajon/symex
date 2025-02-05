@@ -10,15 +10,16 @@
 //! to other memory models, and in general this memory model is slower compared
 //! to e.g. object memory. However, it may provide better performance in certain
 //! situations.
+use hashbrown::HashMap;
 use tracing::trace;
 
 use super::{MemoryError, BITS_IN_BYTE};
 use crate::{
-    smt::{DArray, DContext, DExpr},
+    smt::{DArray, DContext, DExpr, SmtMap, SolverError},
     Endianness,
+    WordSize,
 };
 
-/// Memory store backed by smt array
 #[derive(Debug, Clone)]
 pub struct ArrayMemory {
     /// Reference to the context so new symbols can be created.
@@ -150,6 +151,86 @@ impl ArrayMemory {
     }
 }
 
+pub struct BoolectorMemory {
+    ram: ArrayMemory,
+    register_file: HashMap<String, DExpr>,
+    flags: HashMap<String, DExpr>,
+    variables: HashMap<String, DExpr>,
+    // TODO: Expose these.
+    locals: HashMap<String, DExpr>,
+    pc: u64,
+}
+
+impl SmtMap for BoolectorMemory {
+    type Idx = DExpr;
+    type ReturnValue = DExpr;
+
+    fn get(
+        &self,
+        idx: &Self::Idx,
+        size: usize,
+    ) -> Result<Self::ReturnValue, crate::smt::MemoryError> {
+        Ok(self.ram.read(idx, size as u32)?)
+    }
+
+    fn set(
+        &mut self,
+        idx: &Self::Idx,
+        value: Self::ReturnValue,
+    ) -> Result<(), crate::smt::MemoryError> {
+        Ok(self.ram.write(idx, value)?)
+    }
+
+    fn get_pc(&self) -> Result<Self::ReturnValue, crate::smt::MemoryError> {
+        Ok(self.ram.ctx.from_u64(self.pc, 32))
+    }
+
+    fn set_pc(&mut self, value: u32) -> Result<(), crate::smt::MemoryError> {
+        self.pc = value as u64;
+        Ok(())
+    }
+
+    fn set_flag(
+        &mut self,
+        idx: &str,
+        value: Self::ReturnValue,
+    ) -> Result<(), crate::smt::MemoryError> {
+        self.flags.insert(idx.to_string(), value);
+        Ok(())
+    }
+
+    fn get_flag(&self, idx: &str) -> Result<Self::ReturnValue, crate::smt::MemoryError> {
+        Ok(self
+            .flags
+            .get(idx)
+            .unwrap_or(&self.ram.ctx.from_u64(0, 1))
+            .clone())
+    }
+
+    fn set_register(
+        &mut self,
+        idx: &str,
+        value: Self::ReturnValue,
+    ) -> Result<(), crate::smt::MemoryError> {
+        self.register_file.insert(idx.to_string(), value);
+        Ok(())
+    }
+
+    fn get_register(&self, idx: &str) -> Result<Self::ReturnValue, crate::smt::MemoryError> {
+        // TODO: Set this to
+        Ok(self
+            .register_file
+            .get(idx)
+            .unwrap_or(&self.ram.ctx.from_u64(0, 1))
+            .clone())
+    }
+}
+
+impl From<MemoryError> for crate::smt::MemoryError {
+    fn from(value: MemoryError) -> Self {
+        Self::MemoryFileError(value)
+    }
+}
 #[cfg(test)]
 mod test {
     use super::ArrayMemory;

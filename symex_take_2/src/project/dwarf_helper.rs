@@ -17,7 +17,7 @@ use regex::Regex;
 use tracing::{debug, trace};
 
 use super::{PCHook, PCHooks};
-use crate::arch::Arch;
+use crate::arch::Architecture;
 
 /// Constructs a list of address hook pairs from a list of symbol name hook
 /// pairs.
@@ -26,7 +26,7 @@ use crate::arch::Arch;
 /// if it is a function(subprogram) it adds the address and hook to the hooks
 /// list.
 #[allow(dead_code)]
-pub fn construct_pc_hooks<R: Reader, A: Arch>(
+pub fn construct_pc_hooks<R: Reader, A: Architecture>(
     hooks: &Vec<(Regex, PCHook<A>)>,
     pub_names: &DebugPubNames<R>,
     debug_info: &DebugInfo<R>,
@@ -69,7 +69,7 @@ pub fn construct_pc_hooks<R: Reader, A: Arch>(
     ret
 }
 
-pub fn construct_pc_hooks_no_index<R: Reader, A: Arch>(
+pub fn construct_pc_hooks_no_index<R: Reader, A: Architecture>(
     hooks: &Vec<(Regex, PCHook<A>)>,
     debug_info: &DebugInfo<R>,
     debug_abbrev: &DebugAbbrev<R>,

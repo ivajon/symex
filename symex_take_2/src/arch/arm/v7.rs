@@ -9,7 +9,7 @@ use tracing::trace;
 
 use super::{arm_isa, ArmIsa};
 use crate::{
-    arch::{Arch, ArchError, ParseError},
+    arch::{ArchError, Architecture, ParseError},
     elf_util::{ExpressionType, Variable},
     executor::{instruction::Instruction, state::GAState},
     initiation::run_config::RunConfig,
@@ -27,7 +27,7 @@ pub mod timing;
 #[derive(Debug, Default, Clone)]
 pub struct ArmV7EM {}
 
-impl Arch for ArmV7EM {
+impl Architecture for ArmV7EM {
     fn add_hooks(&self, cfg: &mut RunConfig<Self>) {
         let symbolic_sized = |state: &mut GAState<Self>| {
             let value_ptr = state.get_register("R0".to_owned())?;

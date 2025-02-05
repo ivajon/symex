@@ -11,7 +11,7 @@ use segments::Segments;
 use tracing::{debug, trace};
 
 use crate::{
-    arch::{Arch, ArchError},
+    arch::{ArchError, Architecture},
     executor::{instruction::Instruction, state::GAState},
     initiation::run_config::RunConfig,
     memory::MemoryError,
@@ -42,7 +42,7 @@ pub enum ProjectError {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum PCHook<A: Arch> {
+pub enum PCHook<A: Architecture> {
     Continue,
     EndSuccess,
     EndFailure(&'static str),
@@ -79,7 +79,7 @@ pub type RangeMemoryReadHooks<A> = Vec<((u64, u64), MemoryReadHook<A>)>;
 
 /// Holds all data read from the ELF file.
 // Add all read only memory here later to handle global constants.
-pub struct Project<A: Arch> {
+pub struct Project<A: Architecture> {
     segments: Segments,
     word_size: WordSize,
     endianness: Endianness,
@@ -93,7 +93,7 @@ pub struct Project<A: Arch> {
     range_memory_write_hooks: RangeMemoryWriteHooks<A>,
 }
 
-fn construct_register_read_hooks<A: Arch>(
+fn construct_register_read_hooks<A: Architecture>(
     hooks: Vec<(String, RegisterReadHook<A>)>,
 ) -> RegisterReadHooks<A> {
     let mut ret = HashMap::new();
@@ -103,7 +103,7 @@ fn construct_register_read_hooks<A: Arch>(
     ret
 }
 
-fn construct_register_write_hooks<A: Arch>(
+fn construct_register_write_hooks<A: Architecture>(
     hooks: Vec<(String, RegisterWriteHook<A>)>,
 ) -> RegisterWriteHooks<A> {
     let mut ret = HashMap::new();
@@ -115,7 +115,7 @@ fn construct_register_write_hooks<A: Arch>(
     ret
 }
 
-fn construct_memory_write<A: Arch>(
+fn construct_memory_write<A: Architecture>(
     hooks: Vec<(MemoryHookAddress, MemoryWriteHook<A>)>,
 ) -> (SingleMemoryWriteHooks<A>, RangeMemoryWriteHooks<A>) {
     let mut single_hooks = HashMap::new();
@@ -135,7 +135,7 @@ fn construct_memory_write<A: Arch>(
     (single_hooks, range_hooks)
 }
 
-fn construct_memory_read_hooks<A: Arch>(
+fn construct_memory_read_hooks<A: Architecture>(
     hooks: Vec<(MemoryHookAddress, MemoryReadHook<A>)>,
 ) -> (SingleMemoryReadHooks<A>, RangeMemoryReadHooks<A>) {
     let mut single_hooks = HashMap::new();
@@ -155,7 +155,7 @@ fn construct_memory_read_hooks<A: Arch>(
     (single_hooks, range_hooks)
 }
 
-impl<A: Arch> Project<A> {
+impl<A: Architecture> Project<A> {
     pub fn manual_project(
         program_memory: Vec<u8>,
         start_addr: u64,
@@ -492,7 +492,7 @@ impl<A: Arch> Project<A> {
     }
 }
 
-impl<A: Arch> Debug for Project<A> {
+impl<A: Architecture> Debug for Project<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Project")
             .field("word_size", &self.word_size)

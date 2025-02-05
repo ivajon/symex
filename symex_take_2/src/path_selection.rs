@@ -1,7 +1,7 @@
-use crate::{arch::Arch, executor::state::GAState, smt::DExpr};
+use crate::{arch::Architecture, executor::state::GAState, smt::DExpr};
 
 #[derive(Debug, Clone)]
-pub struct Path<A: Arch> {
+pub struct Path<A: Architecture> {
     /// The state to use when resuming execution.
     ///
     /// The location in the state should be where to resume execution at.
@@ -11,7 +11,7 @@ pub struct Path<A: Arch> {
     pub constraints: Vec<DExpr>,
 }
 
-impl<A: Arch> Path<A> {
+impl<A: Architecture> Path<A> {
     /// Creates a new path starting at a certain state, optionally asserting a
     /// condition on the created path.
     pub fn new(state: GAState<A>, constraint: Option<DExpr>) -> Self {
@@ -29,11 +29,11 @@ impl<A: Arch> Path<A> {
 /// Each path is explored for as long as possible, when a path finishes the most
 /// recently added path is the next to be run.
 #[derive(Debug, Clone)]
-pub struct DFSPathSelection<A: Arch> {
+pub struct DFSPathSelection<A: Architecture> {
     paths: Vec<Path<A>>,
 }
 
-impl<A: Arch> DFSPathSelection<A> {
+impl<A: Architecture> DFSPathSelection<A> {
     /// Creates new without any stored paths.
     pub fn new() -> Self {
         Self { paths: Vec::new() }

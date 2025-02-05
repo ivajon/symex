@@ -11,7 +11,7 @@
 use regex::Regex;
 
 use crate::{
-    arch::Arch,
+    arch::Architecture,
     project::{
         MemoryHookAddress,
         MemoryReadHook,
@@ -23,7 +23,7 @@ use crate::{
 };
 
 /// Configures a symbolic execution run.
-pub struct RunConfig<A: Arch> {
+pub struct RunConfig<A: Architecture> {
     /// Indicate if the result of a completed path should be printed out or not.
     pub show_path_results: bool,
 
@@ -62,7 +62,7 @@ pub struct RunConfig<A: Arch> {
     pub memory_read_hooks: Vec<(MemoryHookAddress, MemoryReadHook<A>)>,
 }
 
-impl<A: Arch> RunConfig<A> {
+impl<A: Architecture> RunConfig<A> {
     /// Creates a new [`RunConfig`] that optionally shows the path results.
     pub const fn new(show_path_results: bool) -> Self {
         Self {
@@ -76,7 +76,7 @@ impl<A: Arch> RunConfig<A> {
     }
 }
 
-impl<A: Arch> Default for RunConfig<A> {
+impl<A: Architecture> Default for RunConfig<A> {
     fn default() -> Self {
         Self {
             show_path_results: true,

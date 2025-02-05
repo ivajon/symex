@@ -96,7 +96,7 @@ pub enum ParseError {
     Generic(&'static str),
 }
 
-pub enum Architecture {
+pub enum SupportedArchitecture {
     Armv7EM(ArmV7EM),
     Armv6EM(ArmV6M),
 }
@@ -105,7 +105,7 @@ pub enum Architecture {
 ///
 /// Denotes that the implementer can be treated as an architecture in this
 /// crate.
-pub trait Arch: Debug + Display + Clone + Sized + 'static {
+pub trait Architecture: Debug + Display + Clone + Sized + 'static {
     /// Converts a slice of bytes to an [`Instruction`]
     fn translate(&self, buff: &[u8], state: &GAState<Self>)
         -> Result<Instruction<Self>, ArchError>;
