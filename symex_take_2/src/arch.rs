@@ -17,8 +17,9 @@ use object::File;
 use thiserror::Error;
 
 use crate::{
-    executor::{instruction::Instruction, state::GAState},
-    initiation::run_config::RunConfig,
+    executor::{hooks::HookContainer, instruction::Instruction2, state::GAState2},
+    project::dwarf_helper::SubProgramMap,
+    Composition,
 };
 
 /// Enumerates the discoverable machine code formats.
@@ -107,13 +108,23 @@ pub enum SupportedArchitecture {
 /// crate.
 pub trait Architecture: Debug + Display + Clone + Sized + 'static {
     /// Converts a slice of bytes to an [`Instruction`]
-    fn translate(&self, buff: &[u8], state: &GAState<Self>)
-        -> Result<Instruction<Self>, ArchError>;
+    fn translate<C: Composition<Architecture = Self>>(
+        &self,
+        buff: &[u8],
+        state: &GAState2<C>,
+    ) -> Result<Instruction2<C>, ArchError>;
 
     /// Adds the architecture specific hooks to the [`RunConfig`]
-    fn add_hooks(&self, cfg: &mut RunConfig<Self>);
-
+    fn add_hooks<C: Composition<Architecture = Self>>(
+        &self,
+        cfg: &mut HookContainer<C>,
+        sub_program_lookup: &mut SubProgramMap,
+    );
     /// Returns an instance of self if the file is defined for this
     /// specific architecture.
     fn discover(file: &File<'_>) -> Result<Option<Self>, ArchError>;
+
+    fn new() -> Self
+    where
+        Self: Sized;
 }

@@ -13,10 +13,12 @@ use general_assembly::{
 };
 
 use super::ArmV6M;
-use crate::executor::instruction::Instruction as GAInstruction;
+use crate::{executor::instruction::Instruction2 as GAInstruction, Composition};
 
 impl ArmV6M {
-    pub(super) fn expand(instr: Instruction) -> GAInstruction<ArmV6M> {
+    pub(super) fn expand<C: Composition<Architecture = Self>>(
+        instr: Instruction,
+    ) -> GAInstruction<C> {
         let operations = match &instr.operation {
             Operation::UDF { .. } => todo!(),
             Operation::ADCReg { m, n, d } => {

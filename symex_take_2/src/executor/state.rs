@@ -6,7 +6,7 @@ use general_assembly::prelude::{Condition, DataWord};
 use tracing::{debug, trace};
 
 use super::{
-    hooks::{HookContainer, PCHook2, ResultOrHook, StateContainer},
+    hooks::{HookContainer, PCHook2, Reader, ResultOrHook, StateContainer, Writer},
     instruction::{Instruction, Instruction2},
 };
 use crate::{
@@ -14,7 +14,7 @@ use crate::{
     elf_util::{ExpressionType, Variable},
     memory::ArrayMemory,
     project::{self, PCHook, Project, ProjectError},
-    smt::{DContext, DExpr, DSolver, SmtExpr, SmtMap, SmtSolver},
+    smt::{DContext, DExpr, DSolver, ProgramMemory, SmtExpr, SmtMap, SmtSolver},
     Composition,
     GAError,
     Result,
@@ -41,12 +41,12 @@ pub struct ContinueInsideInstruction<A: Architecture> {
 pub struct ContinueInsideInstruction2<C: Composition> {
     pub instruction: Instruction2<C>,
     pub index: usize,
-    pub local: HashMap<String, DExpr>,
+    pub local: HashMap<String, C::SmtExpression>,
 }
 
 #[derive(Clone, Debug)]
 pub struct GAState2<C: Composition> {
-    pub project: &'static Project<C::Architecture>,
+    pub project: <C::Memory as SmtMap>::ProgramMemory,
     pub memory: <C::SMT as SmtSolver>::Memory,
     pub state: C::StateContainer,
     pub constraints: C::SMT,
@@ -57,6 +57,7 @@ pub struct GAState2<C: Composition> {
     pub last_pc: u64,
     pub continue_in_instruction: Option<ContinueInsideInstruction2<C>>,
     pub current_instruction: Option<Instruction2<C>>,
+    pub any_counter: u64,
     instruction_counter: usize,
     has_jumped: bool,
     instruction_conditions: VecDeque<Condition>,
@@ -67,7 +68,7 @@ impl<C: Composition> GAState2<C> {
     pub fn new(
         ctx: C::SMT,
         constraints: C::SMT,
-        project: &'static Project<C::Architecture>,
+        project: <C::Memory as SmtMap>::ProgramMemory,
         hooks: HookContainer<C>,
         function: &str,
         end_address: u64,
@@ -88,16 +89,17 @@ impl<C: Composition> GAState2<C> {
         }?;
         debug!("Found stack start at addr: {:#X}.", sp_reg);
 
-        let memory = C::Memory::new(ctx.clone(), ptr_size as usize, project.get_endianness())?;
+        let endianness = project.get_endianness();
+        let memory = C::Memory::new(ctx.clone(), project.clone(), ptr_size as usize, endianness)?;
         let mut registers = HashMap::new();
-        let pc_expr = ctx.from_u64(pc_reg, ptr_size);
+        let pc_expr = ctx.from_u64(pc_reg, ptr_size as u32);
         registers.insert("PC".to_owned(), pc_expr);
 
-        let sp_expr = ctx.from_u64(sp_reg, ptr_size);
+        let sp_expr = ctx.from_u64(sp_reg, ptr_size as u32);
         registers.insert("SP".to_owned(), sp_expr);
 
         // Set the link register to max value to detect when returning from a function.
-        let end_pc_expr = ctx.from_u64(end_address, ptr_size);
+        let end_pc_expr = ctx.from_u64(end_address, ptr_size as u32);
         registers.insert("LR".to_owned(), end_pc_expr);
 
         let mut flags = HashMap::new();
@@ -121,7 +123,14 @@ impl<C: Composition> GAState2<C> {
             instruction_counter: 0,
             has_jumped: false,
             instruction_conditions: VecDeque::new(),
+            any_counter: 0,
         })
+    }
+
+    pub fn label_new_symbolic(&mut self, start: &str) -> String {
+        let ret = format!("{start}_{}", self.any_counter);
+        self.any_counter += 1;
+        ret
     }
 
     pub fn reset_has_jumped(&mut self) {
@@ -192,9 +201,7 @@ impl<C: Composition> GAState2<C> {
         }
     }
 
-    pub fn get_next_instruction_condition_expression(
-        &mut self,
-    ) -> Option<<C::SMT as SmtSolver>::Expression> {
+    pub fn get_next_instruction_condition_expression(&mut self) -> Option<C::SmtExpression> {
         // TODO add error handling
         self.instruction_conditions
             .pop_front()
@@ -246,11 +253,7 @@ impl<C: Composition> GAState2<C> {
     //}
 
     /// Set a value to a register.
-    pub fn set_register(
-        &mut self,
-        register: String,
-        expr: <C::SMT as SmtSolver>::Expression,
-    ) -> Result<()> {
+    pub fn set_register(&mut self, register: String, expr: C::SmtExpression) -> Result<()> {
         // crude solution should probably change
         if register == "PC" {
             return self
@@ -277,7 +280,7 @@ impl<C: Composition> GAState2<C> {
     }
 
     /// Get the value stored at a register.
-    pub fn get_register(&mut self, register: String) -> Result<<C::SMT as SmtSolver>::Expression> {
+    pub fn get_register(&mut self, register: String) -> Result<C::SmtExpression> {
         // crude solution should probably change
         if register == "PC" {
             return self
@@ -295,23 +298,19 @@ impl<C: Composition> GAState2<C> {
     }
 
     /// Set the value of a flag.
-    pub fn set_flag(
-        &mut self,
-        flag: String,
-        expr: <C::SMT as SmtSolver>::Expression,
-    ) -> Result<()> {
+    pub fn set_flag(&mut self, flag: String, expr: C::SmtExpression) -> Result<()> {
         let expr = expr.simplify().simplify();
         trace!("flag {} set to {:?}", flag, expr);
         Ok(self.memory.set_flag(&flag, expr)?)
     }
 
     /// Get the value of a flag.
-    pub fn get_flag(&mut self, flag: String) -> Result<<C::SMT as SmtSolver>::Expression> {
+    pub fn get_flag(&mut self, flag: String) -> Result<C::SmtExpression> {
         Ok(self.memory.get_flag(&flag)?)
     }
 
     /// Get the expression for a condition based on the current flag values.
-    pub fn get_expr(&mut self, condition: &Condition) -> Result<<C::SMT as SmtSolver>::Expression> {
+    pub fn get_expr(&mut self, condition: &Condition) -> Result<C::SmtExpression> {
         Ok(match condition {
             Condition::EQ => self.get_flag("Z".to_owned()).unwrap(),
             Condition::NE => self.get_flag("Z".to_owned()).unwrap().not(),
@@ -375,8 +374,8 @@ impl<C: Composition> GAState2<C> {
 
     fn read_word_from_memory_no_static(
         &self,
-        address: &<C::SMT as SmtSolver>::Expression,
-    ) -> Result<<C::SMT as SmtSolver>::Expression> {
+        address: &C::SmtExpression,
+    ) -> Result<C::SmtExpression> {
         Ok(self
             .memory
             .get(address, self.project.get_word_size() as usize)?)
@@ -384,17 +383,14 @@ impl<C: Composition> GAState2<C> {
 
     fn write_word_from_memory_no_static(
         &mut self,
-        address: &<C::SMT as SmtSolver>::Expression,
-        value: <C::SMT as SmtSolver>::Expression,
+        address: &C::SmtExpression,
+        value: C::SmtExpression,
     ) -> Result<()> {
         Ok(self.memory.set(address, value)?)
     }
 
     /// Read a word form memory. Will respect the endianness of the project.
-    pub fn read_word_from_memory(
-        &self,
-        address: &<C::SMT as SmtSolver>::Expression,
-    ) -> Result<<C::SMT as SmtSolver>::Expression> {
+    pub fn read_word_from_memory(&self, address: &C::SmtExpression) -> Result<C::SmtExpression> {
         match address.get_constant() {
             Some(address_const) => {
                 if self.project.address_in_range(address_const) {
@@ -419,8 +415,8 @@ impl<C: Composition> GAState2<C> {
     /// Write a word to memory. Will respect the endianness of the project.
     pub fn write_word_to_memory(
         &mut self,
-        address: &<C::SMT as SmtSolver>::Expression,
-        value: <C::SMT as SmtSolver>::Expression,
+        address: &C::SmtExpression,
+        value: C::SmtExpression,
     ) -> Result<()> {
         match address.get_constant() {
             Some(address_const) => {
@@ -441,6 +437,14 @@ impl<C: Composition> GAState2<C> {
             .as_arch()
             .translate(data, self)
             .map_err(|el| el.into())
+    }
+
+    pub fn reader<'a>(&'a mut self) -> Reader<'a, C> {
+        self.hooks.reader(&mut self.memory)
+    }
+
+    pub fn writer<'a>(&'a mut self) -> Writer<'a, C> {
+        self.hooks.writer(&mut self.memory)
     }
 }
 

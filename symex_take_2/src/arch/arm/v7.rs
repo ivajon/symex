@@ -4,16 +4,18 @@ use decoder::Convert;
 use disarmv7::prelude::{Operation as V7Operation, *};
 use general_assembly::operation::Operation;
 use object::{File, Object};
-use regex::Regex;
 use tracing::trace;
 
 use super::{arm_isa, ArmIsa};
 use crate::{
     arch::{ArchError, Architecture, ParseError},
-    elf_util::{ExpressionType, Variable},
-    executor::{instruction::Instruction, state::GAState},
-    initiation::run_config::RunConfig,
-    project::{MemoryHookAddress, MemoryReadHook, PCHook, RegisterReadHook, RegisterWriteHook},
+    executor::{
+        hooks::{HookContainer, PCHook2, StateContainer},
+        instruction::Instruction2,
+        state::GAState2,
+    },
+    project::dwarf_helper::SubProgramMap,
+    smt::{SmtExpr, SmtMap},
 };
 
 #[rustfmt::skip]
@@ -28,28 +30,34 @@ pub mod timing;
 pub struct ArmV7EM {}
 
 impl Architecture for ArmV7EM {
-    fn add_hooks(&self, cfg: &mut RunConfig<Self>) {
-        let symbolic_sized = |state: &mut GAState<Self>| {
-            let value_ptr = state.get_register("R0".to_owned())?;
-            let size = state.get_register("R1".to_owned())?.get_constant().unwrap() * 8;
-            let name = "any".to_owned() + &state.marked_symbolic.len().to_string();
-            let symb_value = state.ctx.unconstrained(size as u32, &name);
-            state.marked_symbolic.push(Variable {
-                name: Some(name),
-                value: symb_value.clone(),
-                ty: ExpressionType::Integer(size as usize),
-            });
-            state.memory.write(&value_ptr, symb_value)?;
+    fn add_hooks<C: crate::Composition<Architecture = Self>>(
+        &self,
+        cfg: &mut HookContainer<C>,
+        map: &mut SubProgramMap,
+    ) {
+        let symbolic_sized = |state: &mut GAState2<C>| {
+            let value_ptr = state.memory.get_register("R0")?;
+            let size = state.memory.get_register("R1")?.get_constant().unwrap() * 8;
+            let name = state.label_new_symbolic("any");
+            let symb_value = state.memory.unconstrained(&name, size as usize);
+            // TODO: We need to label this with proper variable names if possible.
+            //state.marked_symbolic.push(Variable {
+            //    name: Some(name),
+            //    value: symb_value.clone(),
+            //    ty: ExpressionType::Integer(size as usize),
+            //});
+            state.memory.set(&value_ptr, symb_value)?;
 
             let lr = state.get_register("LR".to_owned())?;
             state.set_register("PC".to_owned(), lr)?;
             Ok(())
         };
 
-        cfg.pc_hooks.push((
-            Regex::new(r"^symbolic_size<.+>$").unwrap(),
-            PCHook::Intrinsic(symbolic_sized),
-        ));
+        cfg.add_pc_hook_regex(
+            map,
+            r"^symbolic_size<.+>$",
+            PCHook2::Intrinsic(symbolic_sized),
+        );
         // §B1.4 Specifies that R[15] => Addr(Current instruction) + 4
         //
         // This can be translated in to
@@ -59,52 +67,50 @@ impl Architecture for ArmV7EM {
         //
         //
         // Or we can simply take the previous PC + 4.
-        let read_pc: RegisterReadHook<Self> = |state| {
+        let read_pc = |state: &mut GAState2<C>| {
             let new_pc = state
-                .ctx
-                .from_u64(state.last_pc + 4, state.project.get_word_size())
+                .memory
+                .from_u64(state.last_pc + 4, state.memory.get_word_size())
                 .simplify();
             Ok(new_pc)
         };
 
-        let read_sp: RegisterReadHook<Self> = |state| {
-            let two = state.ctx.from_u64((!(0b11u32)) as u64, 32);
+        let read_sp = |state: &mut GAState2<C>| {
+            let two = state.memory.from_u64((!(0b11u32)) as u64, 32);
             let sp = state.get_register("SP".to_owned()).unwrap();
             let sp = sp.simplify();
             Ok(sp.and(&two))
         };
 
-        let write_pc: RegisterWriteHook<Self> =
-            |state, value| state.set_register("PC".to_owned(), value);
-        let write_sp: RegisterWriteHook<Self> = |state, value| {
+        let write_pc = |state: &mut GAState2<C>, value| state.set_register("PC".to_owned(), value);
+        let write_sp = |state: &mut GAState2<C>, value: C::SmtExpression| {
             state.set_register(
-                "SP".to_owned(),
-                value.and(&state.ctx.from_u64((!(0b11u32)) as u64, 32)),
+                "SP".to_string(),
+                value.and(&state.memory.from_u64((!(0b11u32)) as u64, 32)),
             )?;
             let sp = state.get_register("SP".to_owned()).unwrap();
             let sp = sp.simplify();
             state.set_register("SP".to_owned(), sp)
         };
 
-        cfg.register_read_hooks.push(("PC+".to_owned(), read_pc));
-        cfg.register_write_hooks.push(("PC+".to_owned(), write_pc));
-        cfg.register_read_hooks.push(("SP&".to_owned(), read_sp));
-        cfg.register_write_hooks.push(("SP&".to_owned(), write_sp));
+        cfg.add_register_read_hook("PC+".to_string(), read_pc);
+        cfg.add_register_write_hook("PC+".to_owned(), write_pc);
+        cfg.add_register_read_hook("SP&".to_owned(), read_sp);
+        cfg.add_register_write_hook("SP&".to_owned(), write_sp);
 
         // reset always done
-        let read_reset_done: MemoryReadHook<Self> = |state, _addr| {
-            let value = state.ctx.from_u64(0xffff_ffff, 32);
+        let read_reset_done = |state: &mut GAState2<C>, _addr| {
+            let value = state.memory.from_u64(0xffff_ffff, 32);
             Ok(value)
         };
-        cfg.memory_read_hooks
-            .push((MemoryHookAddress::Single(0x4000c008), read_reset_done));
+        cfg.add_memory_read_hook(0x4000c008, read_reset_done);
     }
 
-    fn translate(
+    fn translate<C: crate::Composition<Architecture = Self>>(
         &self,
         buff: &[u8],
-        state: &GAState<Self>,
-    ) -> Result<Instruction<Self>, ArchError> {
+        state: &GAState2<C>,
+    ) -> Result<Instruction2<C>, ArchError> {
         let mut buff: disarmv7::buffer::PeekableBuffer<u8, _> = buff.iter().cloned().into();
 
         let instr = V7Operation::parse(&mut buff).map_err(|e| ArchError::ParsingError(e.into()))?;
@@ -112,7 +118,7 @@ impl Architecture for ArmV7EM {
         let timing = Self::cycle_count_m4_core(&instr.1);
         let ops: Vec<Operation> = instr.clone().convert(state.get_in_conditional_block());
 
-        Ok(Instruction {
+        Ok(Instruction2 {
             instruction_size: instr.0 as u32,
             operations: ops,
             max_cycle: timing,
@@ -134,6 +140,13 @@ impl Architecture for ArmV7EM {
             ArmIsa::ArmV6M => Ok(None),
             ArmIsa::ArmV7EM => Ok(Some(ArmV7EM::default())),
         }
+    }
+
+    fn new() -> Self
+    where
+        Self: Sized,
+    {
+        Self {}
     }
 }
 

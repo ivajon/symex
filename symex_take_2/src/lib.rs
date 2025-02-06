@@ -25,13 +25,13 @@ use std::fmt::Debug;
 
 use arch::{ArchError, Architecture};
 use executor::hooks::StateContainer;
-use gimli::write::Expression;
 use logging::Logger;
 use memory::MemoryError;
 use project::ProjectError;
-use smt::{SmtMap, SmtSolver, SolverError};
+use smt::{SmtExpr, SmtMap, SmtSolver, SolverError};
 
 pub mod arch;
+pub mod defaults;
 pub mod elf_util;
 pub mod executor;
 pub mod initiation;
@@ -42,7 +42,6 @@ pub mod path_selection;
 pub mod project;
 pub mod run_elf;
 pub mod smt;
-//pub mod util;
 
 pub type Result<T> = std::result::Result<T, GAError>;
 
@@ -51,14 +50,12 @@ pub trait Composition: Clone + Debug {
     /// The state container, this can be either only architecture specific data
     /// or it may include user provided data.
     type StateContainer: StateContainer<Architecture = Self::Architecture>;
-    type SMT: SmtSolver<Memory = Self::Memory>;
-    type Logger: Logger;
+    type SMT: SmtSolver<Memory = Self::Memory, Expression = Self::SmtExpression>;
     type Architecture: Architecture;
-    type Memory: SmtMap<
-        SMT = Self::SMT,
-        ReturnValue = <Self::SMT as SmtSolver>::Expression,
-        Idx = <Self::SMT as SmtSolver>::Expression,
-    >;
+    type Logger: Logger;
+
+    type SmtExpression: SmtExpr;
+    type Memory: SmtMap<SMT = Self::SMT, Expression = <Self::SMT as SmtSolver>::Expression>;
 
     fn logger(&mut self) -> &mut Self::Logger;
 }
@@ -82,6 +79,9 @@ pub enum GAError {
 
     #[error("Program counter is not deterministic.")]
     NonDeterministicPC,
+
+    #[error("Could not open the specified file.")]
+    CouldNotOpenFile(String),
 
     #[error("Solver error.")]
     SolverError(#[from] SolverError),

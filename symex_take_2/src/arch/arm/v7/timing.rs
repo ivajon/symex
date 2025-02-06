@@ -1,7 +1,10 @@
 use disarmv7::prelude::{Condition, Operation as V7Operation, Register};
 
 use super::ArmV7EM;
-use crate::executor::{instruction::CycleCount, state::GAState};
+use crate::{
+    executor::{instruction::CycleCount2, state::GAState2},
+    Composition,
+};
 // use general_assembly::operation::Operation;
 
 impl super::ArmV7EM {
@@ -167,9 +170,11 @@ impl super::ArmV7EM {
         }
     }
 
-    pub fn cycle_count_m4_core(instr: &V7Operation) -> CycleCount<Self> {
+    pub fn cycle_count_m4_core<C: Composition<Architecture = ArmV7EM>>(
+        instr: &V7Operation,
+    ) -> CycleCount2<C> {
         let p = 3;
-        let pipeline = |state: &GAState<ArmV7EM>| match state.get_last_instruction() {
+        let pipeline = |state: &mut GAState2<C>| match state.get_last_instruction() {
             Some(instr) => match instr.memory_access {
                 true => 1,
                 false => 2,
@@ -178,22 +183,22 @@ impl super::ArmV7EM {
         };
         let if_pc = |reg: Register, value: usize| {
             if reg == Register::PC {
-                return CycleCount::Value(value + p);
+                return CycleCount2::Value(value + p);
             }
-            CycleCount::Value(value)
+            CycleCount2::Value(value)
         };
         match instr {
-            V7Operation::AdcImmediate(_) | V7Operation::AdcRegister(_) => CycleCount::Value(1),
+            V7Operation::AdcImmediate(_) | V7Operation::AdcRegister(_) => CycleCount2::Value(1),
             V7Operation::AddImmediate(add) => if_pc(add.rd.unwrap_or(add.rn), 1),
             V7Operation::AddRegister(add) => if_pc(add.rd.unwrap_or(add.rn), 1),
             V7Operation::AddSPImmediate(add) => if_pc(add.rd.unwrap_or(Register::SP), 1),
             V7Operation::AddSPRegister(add) => if_pc(add.rd.unwrap_or(Register::SP), 1),
-            V7Operation::Adr(_) => CycleCount::Value(1),
-            V7Operation::AndImmediate(_) | V7Operation::AndRegister(_) => CycleCount::Value(1),
-            V7Operation::AsrImmediate(_) | V7Operation::AsrRegister(_) => CycleCount::Value(1),
+            V7Operation::Adr(_) => CycleCount2::Value(1),
+            V7Operation::AndImmediate(_) | V7Operation::AndRegister(_) => CycleCount2::Value(1),
+            V7Operation::AsrImmediate(_) | V7Operation::AsrRegister(_) => CycleCount2::Value(1),
             V7Operation::B(b) => {
                 if b.condition != Condition::None {
-                    let counter = |state: &GAState<ArmV7EM>| {
+                    let counter = |state: &mut GAState2<C>| {
                         // match (state.get_next_instruction(), state.get_has_jumped()) {
                         //     (
                         //         Ok(crate::general_assembly::state::HookOrInstruction::Instruction(
@@ -218,42 +223,42 @@ impl super::ArmV7EM {
                             false => 1,
                         }
                     };
-                    CycleCount::Function(counter)
+                    CycleCount2::Function(counter)
                 } else {
-                    // CycleCount::Value(1 + 3)
+                    // CycleCount2::Value(1 + 3)
 
                     // This is a gross over estimation, it should be more like 1+1
-                    CycleCount::Value(1 + 3)
+                    CycleCount2::Value(1 + 3)
                 }
             }
-            V7Operation::Bfc(_) => CycleCount::Value(1),
-            V7Operation::Bfi(_) => CycleCount::Value(1),
-            V7Operation::BicImmediate(_) | V7Operation::BicRegister(_) => CycleCount::Value(1),
-            V7Operation::Bkpt(_) => CycleCount::Value(0),
-            V7Operation::Bl(_) => CycleCount::Value(1 + 3),
-            V7Operation::Blx(_) => CycleCount::Value(1 + 3),
-            V7Operation::Bx(_) => CycleCount::Value(1 + 3),
+            V7Operation::Bfc(_) => CycleCount2::Value(1),
+            V7Operation::Bfi(_) => CycleCount2::Value(1),
+            V7Operation::BicImmediate(_) | V7Operation::BicRegister(_) => CycleCount2::Value(1),
+            V7Operation::Bkpt(_) => CycleCount2::Value(0),
+            V7Operation::Bl(_) => CycleCount2::Value(1 + 3),
+            V7Operation::Blx(_) => CycleCount2::Value(1 + 3),
+            V7Operation::Bx(_) => CycleCount2::Value(1 + 3),
             V7Operation::Cbz(_) => {
-                let counter = |state: &GAState<ArmV7EM>| match state.get_has_jumped() {
+                let counter = |state: &GAState2<C>| match state.get_has_jumped() {
                     true => 1 + 3,
                     false => 1,
                 };
-                CycleCount::Function(counter)
+                CycleCount2::Function(counter)
             }
-            V7Operation::Clrex(_) => CycleCount::Value(1),
-            V7Operation::Clz(_) => CycleCount::Value(1),
-            V7Operation::CmnImmediate(_) | V7Operation::CmnRegister(_) => CycleCount::Value(1),
-            V7Operation::CmpImmediate(_) | V7Operation::CmpRegister(_) => CycleCount::Value(1),
-            V7Operation::Cps(_) => CycleCount::Value(2),
-            V7Operation::Dbg(_) => CycleCount::Value(1),
-            V7Operation::Dmb(_) => CycleCount::Value(1), /* todo!("This requires a model of */
+            V7Operation::Clrex(_) => CycleCount2::Value(1),
+            V7Operation::Clz(_) => CycleCount2::Value(1),
+            V7Operation::CmnImmediate(_) | V7Operation::CmnRegister(_) => CycleCount2::Value(1),
+            V7Operation::CmpImmediate(_) | V7Operation::CmpRegister(_) => CycleCount2::Value(1),
+            V7Operation::Cps(_) => CycleCount2::Value(2),
+            V7Operation::Dbg(_) => CycleCount2::Value(1),
+            V7Operation::Dmb(_) => CycleCount2::Value(1), /* todo!("This requires a model of */
             // barriers")
             V7Operation::Dsb(_) => todo!("This requires a model of barriers"),
-            V7Operation::EorImmediate(_) | V7Operation::EorRegister(_) => CycleCount::Value(1),
+            V7Operation::EorImmediate(_) | V7Operation::EorRegister(_) => CycleCount2::Value(1),
             V7Operation::Isb(_) => todo!("This requires a model of barriers"),
             // TODO! Add detection for whether this is folded or not, if it is the value here is 0
             V7Operation::It(_) => {
-                let counter = |state: &GAState<ArmV7EM>| match state.get_last_instruction() {
+                let counter = |state: &GAState2<C>| match state.get_last_instruction() {
                     Some(instr) => match instr.instruction_size {
                         16 => 0,
                         _ => 1,
@@ -261,7 +266,7 @@ impl super::ArmV7EM {
                     None => 1,
                 };
 
-                CycleCount::Function(counter)
+                CycleCount2::Function(counter)
             }
             V7Operation::Ldm(ldm) => {
                 let pc = ldm.registers.registers.contains(&Register::PC);
@@ -271,7 +276,7 @@ impl super::ArmV7EM {
                     // TODO! Model pipeline better
                     count += 3;
                 }
-                CycleCount::Value(count)
+                CycleCount2::Value(count)
             }
             V7Operation::Ldmdb(ldm) => {
                 let pc = ldm.registers.registers.contains(&Register::PC);
@@ -281,32 +286,32 @@ impl super::ArmV7EM {
                     // TODO! Model pipeline better
                     count += 3;
                 }
-                CycleCount::Value(count)
+                CycleCount2::Value(count)
             }
             // TODO! Add in pre load hints
             V7Operation::LdrImmediate(el) => match (el.rt, el.rn) {
-                (_, Register::PC) => CycleCount::Value(2),
-                (Register::PC, _) => CycleCount::Value(2 + 3),
-                _ => CycleCount::Function(pipeline),
+                (_, Register::PC) => CycleCount2::Value(2),
+                (Register::PC, _) => CycleCount2::Value(2 + 3),
+                _ => CycleCount2::Function(pipeline),
             },
             V7Operation::LdrLiteral(el) => match el.rt {
-                Register::PC => CycleCount::Value(2 + 3),
-                _ => CycleCount::Function(pipeline),
+                Register::PC => CycleCount2::Value(2 + 3),
+                _ => CycleCount2::Function(pipeline),
             },
             V7Operation::LdrRegister(el) => match (el.rt, el.rn) {
-                (Register::PC, Register::PC) => CycleCount::Value(2),
-                (Register::PC, _) => CycleCount::Value(2 + 3),
-                _ => CycleCount::Function(pipeline),
+                (Register::PC, Register::PC) => CycleCount2::Value(2),
+                (Register::PC, _) => CycleCount2::Value(2 + 3),
+                _ => CycleCount2::Function(pipeline),
             },
             V7Operation::LdrbImmediate(_)
             | V7Operation::LdrbLiteral(_)
-            | V7Operation::LdrbRegister(_) => CycleCount::Value(2),
-            V7Operation::Ldrbt(_) => CycleCount::Value(2),
-            V7Operation::LdrdImmediate(_ldrd) => CycleCount::Value(1 + 2),
-            V7Operation::LdrdLiteral(_) => CycleCount::Value(1 + 2),
+            | V7Operation::LdrbRegister(_) => CycleCount2::Value(2),
+            V7Operation::Ldrbt(_) => CycleCount2::Value(2),
+            V7Operation::LdrdImmediate(_ldrd) => CycleCount2::Value(1 + 2),
+            V7Operation::LdrdLiteral(_) => CycleCount2::Value(1 + 2),
             // TODO! This requires a model of semaphores
             V7Operation::Ldrex(_) | V7Operation::Ldrexb(_) | V7Operation::Ldrexh(_) => {
-                CycleCount::Value(2)
+                CycleCount2::Value(2)
             }
             // TODO! Add in model of contiguous loads to allow next load to be single cycle
             V7Operation::LdrhImmediate(_)
@@ -321,27 +326,27 @@ impl super::ArmV7EM {
             | V7Operation::LdrshLiteral(_)
             | V7Operation::LdrshRegister(_)
             | V7Operation::Ldrsht(_)
-            | V7Operation::Ldrt(_) => CycleCount::Function(pipeline),
-            V7Operation::LslImmediate(_) | V7Operation::LslRegister(_) => CycleCount::Value(1),
-            V7Operation::LsrImmediate(_) | V7Operation::LsrRegister(_) => CycleCount::Value(1),
-            V7Operation::Mla(_) | V7Operation::Mls(_) => CycleCount::Value(2),
+            | V7Operation::Ldrt(_) => CycleCount2::Function(pipeline),
+            V7Operation::LslImmediate(_) | V7Operation::LslRegister(_) => CycleCount2::Value(1),
+            V7Operation::LsrImmediate(_) | V7Operation::LsrRegister(_) => CycleCount2::Value(1),
+            V7Operation::Mla(_) | V7Operation::Mls(_) => CycleCount2::Value(2),
             V7Operation::MovImmediate(mov) => match mov.rd {
-                Register::PC => CycleCount::Value(1 + p),
-                _ => CycleCount::Value(1),
+                Register::PC => CycleCount2::Value(1 + p),
+                _ => CycleCount2::Value(1),
             },
             V7Operation::MovRegister(mov) => match mov.rd {
-                Register::PC => CycleCount::Value(1 + 3),
-                _ => CycleCount::Value(1),
+                Register::PC => CycleCount2::Value(1 + 3),
+                _ => CycleCount2::Value(1),
             },
-            V7Operation::Movt(_) => CycleCount::Value(1),
-            V7Operation::Mrs(_) => CycleCount::Value(2),
-            V7Operation::Msr(_) => CycleCount::Value(2),
-            V7Operation::Mul(_) => CycleCount::Value(1),
-            V7Operation::MvnImmediate(_) | V7Operation::MvnRegister(_) => CycleCount::Value(1),
-            V7Operation::Nop(_) => CycleCount::Value(1),
-            V7Operation::OrnImmediate(_) | V7Operation::OrnRegister(_) => CycleCount::Value(1),
-            V7Operation::OrrImmediate(_) | V7Operation::OrrRegister(_) => CycleCount::Value(1),
-            V7Operation::Pkh(_) => CycleCount::Value(1),
+            V7Operation::Movt(_) => CycleCount2::Value(1),
+            V7Operation::Mrs(_) => CycleCount2::Value(2),
+            V7Operation::Msr(_) => CycleCount2::Value(2),
+            V7Operation::Mul(_) => CycleCount2::Value(1),
+            V7Operation::MvnImmediate(_) | V7Operation::MvnRegister(_) => CycleCount2::Value(1),
+            V7Operation::Nop(_) => CycleCount2::Value(1),
+            V7Operation::OrnImmediate(_) | V7Operation::OrnRegister(_) => CycleCount2::Value(1),
+            V7Operation::OrrImmediate(_) | V7Operation::OrrRegister(_) => CycleCount2::Value(1),
+            V7Operation::Pkh(_) => CycleCount2::Value(1),
             V7Operation::PldImmediate(_) => todo!("Add in preload hints"),
             V7Operation::PldLiteral(_) => todo!("Add in preload hints"),
             V7Operation::PldRegister(_) => todo!("Add in preload hints"),
@@ -358,135 +363,135 @@ impl super::ArmV7EM {
                     true => p - 1,
                     _ => 0,
                 };
-                CycleCount::Value(1 + pop.registers.registers.len() + ret)
+                CycleCount2::Value(1 + pop.registers.registers.len() + ret)
             }
-            V7Operation::Push(push) => CycleCount::Value(1 + push.registers.registers.len()),
-            V7Operation::Qadd(_) => CycleCount::Value(1),
-            V7Operation::Qadd16(_) => CycleCount::Value(1),
-            V7Operation::Qadd8(_) => CycleCount::Value(1),
-            V7Operation::Qasx(_) => CycleCount::Value(1),
-            V7Operation::Qdadd(_) => CycleCount::Value(1),
-            V7Operation::Qdsub(_) => CycleCount::Value(1),
-            V7Operation::Qsax(_) => CycleCount::Value(1),
-            V7Operation::Qsub(_) => CycleCount::Value(1),
-            V7Operation::Qsub16(_) => CycleCount::Value(1),
-            V7Operation::Qsub8(_) => CycleCount::Value(1),
-            V7Operation::Rbit(_) => CycleCount::Value(1),
-            V7Operation::Rev(_) => CycleCount::Value(1),
-            V7Operation::Rev16(_) => CycleCount::Value(1),
-            V7Operation::Revsh(_) => CycleCount::Value(1),
-            V7Operation::RorImmediate(_) | V7Operation::RorRegister(_) => CycleCount::Value(1),
-            V7Operation::Rrx(_) => CycleCount::Value(1),
-            V7Operation::RsbImmediate(_) | V7Operation::RsbRegister(_) => CycleCount::Value(1),
-            V7Operation::Sadd16(_) => CycleCount::Value(1),
-            V7Operation::Sadd8(_) => CycleCount::Value(1),
-            V7Operation::Sasx(_) => CycleCount::Value(1),
-            V7Operation::SbcImmediate(_) | V7Operation::SbcRegister(_) => CycleCount::Value(1),
-            V7Operation::Sbfx(_) => CycleCount::Value(1),
+            V7Operation::Push(push) => CycleCount2::Value(1 + push.registers.registers.len()),
+            V7Operation::Qadd(_) => CycleCount2::Value(1),
+            V7Operation::Qadd16(_) => CycleCount2::Value(1),
+            V7Operation::Qadd8(_) => CycleCount2::Value(1),
+            V7Operation::Qasx(_) => CycleCount2::Value(1),
+            V7Operation::Qdadd(_) => CycleCount2::Value(1),
+            V7Operation::Qdsub(_) => CycleCount2::Value(1),
+            V7Operation::Qsax(_) => CycleCount2::Value(1),
+            V7Operation::Qsub(_) => CycleCount2::Value(1),
+            V7Operation::Qsub16(_) => CycleCount2::Value(1),
+            V7Operation::Qsub8(_) => CycleCount2::Value(1),
+            V7Operation::Rbit(_) => CycleCount2::Value(1),
+            V7Operation::Rev(_) => CycleCount2::Value(1),
+            V7Operation::Rev16(_) => CycleCount2::Value(1),
+            V7Operation::Revsh(_) => CycleCount2::Value(1),
+            V7Operation::RorImmediate(_) | V7Operation::RorRegister(_) => CycleCount2::Value(1),
+            V7Operation::Rrx(_) => CycleCount2::Value(1),
+            V7Operation::RsbImmediate(_) | V7Operation::RsbRegister(_) => CycleCount2::Value(1),
+            V7Operation::Sadd16(_) => CycleCount2::Value(1),
+            V7Operation::Sadd8(_) => CycleCount2::Value(1),
+            V7Operation::Sasx(_) => CycleCount2::Value(1),
+            V7Operation::SbcImmediate(_) | V7Operation::SbcRegister(_) => CycleCount2::Value(1),
+            V7Operation::Sbfx(_) => CycleCount2::Value(1),
             // TODO! Add way to find whether or not this is 12 or 2
-            V7Operation::Sdiv(_) => CycleCount::Value(12),
-            V7Operation::Sel(_) => CycleCount::Value(1),
-            V7Operation::Sev(_) => CycleCount::Value(1),
-            V7Operation::Shadd16(_) => CycleCount::Value(1),
-            V7Operation::Shadd8(_) => CycleCount::Value(1),
-            V7Operation::Shasx(_) => CycleCount::Value(1),
-            V7Operation::Shsax(_) => CycleCount::Value(1),
-            V7Operation::Shsub16(_) => CycleCount::Value(1),
-            V7Operation::Shsub8(_) => CycleCount::Value(1),
-            V7Operation::Smla(_) => CycleCount::Value(1),
-            V7Operation::Smlad(_) => CycleCount::Value(1),
-            V7Operation::Smlal(_) => CycleCount::Value(1),
-            V7Operation::SmlalSelective(_) => CycleCount::Value(1),
-            V7Operation::Smlald(_) => CycleCount::Value(1),
-            V7Operation::Smlaw(_) => CycleCount::Value(1),
-            V7Operation::Smlsd(_) => CycleCount::Value(1),
-            V7Operation::Smlsld(_) => CycleCount::Value(1),
-            V7Operation::Smmla(_) => CycleCount::Value(1),
-            V7Operation::Smmls(_) => CycleCount::Value(1),
-            V7Operation::Smmul(_) => CycleCount::Value(1),
-            V7Operation::Smuad(_) => CycleCount::Value(1),
-            V7Operation::Smul(_) => CycleCount::Value(1),
-            V7Operation::Smull(_) => CycleCount::Value(1),
-            V7Operation::Smulw(_) => CycleCount::Value(1),
-            V7Operation::Smusd(_) => CycleCount::Value(1),
-            V7Operation::Ssat(_) | V7Operation::Ssat16(_) => CycleCount::Value(1),
-            V7Operation::Ssax(_) => CycleCount::Value(1),
-            V7Operation::Ssub16(_) => CycleCount::Value(1),
-            V7Operation::Ssub8(_) => CycleCount::Value(1),
-            V7Operation::Stm(stm) => CycleCount::Value(1 + stm.registers.registers.len()),
-            V7Operation::Stmdb(stm) => CycleCount::Value(1 + stm.registers.registers.len()),
+            V7Operation::Sdiv(_) => CycleCount2::Value(12),
+            V7Operation::Sel(_) => CycleCount2::Value(1),
+            V7Operation::Sev(_) => CycleCount2::Value(1),
+            V7Operation::Shadd16(_) => CycleCount2::Value(1),
+            V7Operation::Shadd8(_) => CycleCount2::Value(1),
+            V7Operation::Shasx(_) => CycleCount2::Value(1),
+            V7Operation::Shsax(_) => CycleCount2::Value(1),
+            V7Operation::Shsub16(_) => CycleCount2::Value(1),
+            V7Operation::Shsub8(_) => CycleCount2::Value(1),
+            V7Operation::Smla(_) => CycleCount2::Value(1),
+            V7Operation::Smlad(_) => CycleCount2::Value(1),
+            V7Operation::Smlal(_) => CycleCount2::Value(1),
+            V7Operation::SmlalSelective(_) => CycleCount2::Value(1),
+            V7Operation::Smlald(_) => CycleCount2::Value(1),
+            V7Operation::Smlaw(_) => CycleCount2::Value(1),
+            V7Operation::Smlsd(_) => CycleCount2::Value(1),
+            V7Operation::Smlsld(_) => CycleCount2::Value(1),
+            V7Operation::Smmla(_) => CycleCount2::Value(1),
+            V7Operation::Smmls(_) => CycleCount2::Value(1),
+            V7Operation::Smmul(_) => CycleCount2::Value(1),
+            V7Operation::Smuad(_) => CycleCount2::Value(1),
+            V7Operation::Smul(_) => CycleCount2::Value(1),
+            V7Operation::Smull(_) => CycleCount2::Value(1),
+            V7Operation::Smulw(_) => CycleCount2::Value(1),
+            V7Operation::Smusd(_) => CycleCount2::Value(1),
+            V7Operation::Ssat(_) | V7Operation::Ssat16(_) => CycleCount2::Value(1),
+            V7Operation::Ssax(_) => CycleCount2::Value(1),
+            V7Operation::Ssub16(_) => CycleCount2::Value(1),
+            V7Operation::Ssub8(_) => CycleCount2::Value(1),
+            V7Operation::Stm(stm) => CycleCount2::Value(1 + stm.registers.registers.len()),
+            V7Operation::Stmdb(stm) => CycleCount2::Value(1 + stm.registers.registers.len()),
             V7Operation::StrImmediate(_) | V7Operation::StrRegister(_) => {
-                CycleCount::Function(pipeline)
+                CycleCount2::Function(pipeline)
             }
             V7Operation::StrbImmediate(_) | V7Operation::StrbRegister(_) => {
-                CycleCount::Function(pipeline)
+                CycleCount2::Function(pipeline)
             }
-            V7Operation::Strbt(_) => CycleCount::Value(2),
+            V7Operation::Strbt(_) => CycleCount2::Value(2),
             // N is two here
-            V7Operation::StrdImmediate(_strd) => CycleCount::Value(1 + 2),
-            V7Operation::Strex(_) => CycleCount::Value(2),
-            V7Operation::Strexb(_) => CycleCount::Value(2),
-            V7Operation::Strexh(_) => CycleCount::Value(2),
+            V7Operation::StrdImmediate(_strd) => CycleCount2::Value(1 + 2),
+            V7Operation::Strex(_) => CycleCount2::Value(2),
+            V7Operation::Strexb(_) => CycleCount2::Value(2),
+            V7Operation::Strexh(_) => CycleCount2::Value(2),
             V7Operation::StrhImmediate(_)
             | V7Operation::StrhRegister(_)
             | V7Operation::Strht(_)
-            | V7Operation::Strt(_) => CycleCount::Function(pipeline),
-            V7Operation::SubImmediate(_) | V7Operation::SubRegister(_) => CycleCount::Value(1),
-            V7Operation::SubSpMinusImmediate(_) => CycleCount::Value(1),
-            V7Operation::SubSpMinusRegister(_) => CycleCount::Value(1),
+            | V7Operation::Strt(_) => CycleCount2::Function(pipeline),
+            V7Operation::SubImmediate(_) | V7Operation::SubRegister(_) => CycleCount2::Value(1),
+            V7Operation::SubSpMinusImmediate(_) => CycleCount2::Value(1),
+            V7Operation::SubSpMinusRegister(_) => CycleCount2::Value(1),
 
-            V7Operation::Sxtab(_) => CycleCount::Value(1),
+            V7Operation::Sxtab(_) => CycleCount2::Value(1),
 
-            V7Operation::Sxtab16(_) => CycleCount::Value(1),
-            V7Operation::Sxtah(_) => CycleCount::Value(1),
-            V7Operation::Sxtb(_) => CycleCount::Value(1),
-            V7Operation::Sxtb16(_) => CycleCount::Value(1),
-            V7Operation::Sxth(_) => CycleCount::Value(1),
-            V7Operation::Tb(_) => CycleCount::Value(2 + p),
+            V7Operation::Sxtab16(_) => CycleCount2::Value(1),
+            V7Operation::Sxtah(_) => CycleCount2::Value(1),
+            V7Operation::Sxtb(_) => CycleCount2::Value(1),
+            V7Operation::Sxtb16(_) => CycleCount2::Value(1),
+            V7Operation::Sxth(_) => CycleCount2::Value(1),
+            V7Operation::Tb(_) => CycleCount2::Value(2 + p),
             // TODO!  The docs do not mention any cycle count for this
             // might be incorrect
-            V7Operation::TeqImmediate(_) | V7Operation::TeqRegister(_) => CycleCount::Value(1),
-            V7Operation::TstImmediate(_) | V7Operation::TstRegister(_) => CycleCount::Value(1),
-            V7Operation::Uadd16(_) => CycleCount::Value(1),
-            V7Operation::Uadd8(_) => CycleCount::Value(1),
-            V7Operation::Uasx(_) => CycleCount::Value(1),
-            V7Operation::Ubfx(_) => CycleCount::Value(1),
-            V7Operation::Udf(_) => CycleCount::Value(1),
+            V7Operation::TeqImmediate(_) | V7Operation::TeqRegister(_) => CycleCount2::Value(1),
+            V7Operation::TstImmediate(_) | V7Operation::TstRegister(_) => CycleCount2::Value(1),
+            V7Operation::Uadd16(_) => CycleCount2::Value(1),
+            V7Operation::Uadd8(_) => CycleCount2::Value(1),
+            V7Operation::Uasx(_) => CycleCount2::Value(1),
+            V7Operation::Ubfx(_) => CycleCount2::Value(1),
+            V7Operation::Udf(_) => CycleCount2::Value(1),
             // TODO! Add way to check if this is 12 or 2
-            V7Operation::Udiv(_) => CycleCount::Value(12),
-            V7Operation::Uhadd16(_) => CycleCount::Value(1),
-            V7Operation::Uhadd8(_) => CycleCount::Value(1),
-            V7Operation::Uhasx(_) => CycleCount::Value(1),
-            V7Operation::Uhsax(_) => CycleCount::Value(1),
-            V7Operation::Uhsub16(_) => CycleCount::Value(1),
-            V7Operation::Uhsub8(_) => CycleCount::Value(1),
-            V7Operation::Umaal(_) => CycleCount::Value(1),
-            V7Operation::Umlal(_) => CycleCount::Value(1),
-            V7Operation::Umull(_) => CycleCount::Value(1),
-            V7Operation::Uqadd16(_) => CycleCount::Value(1),
-            V7Operation::Uqadd8(_) => CycleCount::Value(1),
-            V7Operation::Uqasx(_) => CycleCount::Value(1),
-            V7Operation::Uqsax(_) => CycleCount::Value(1),
-            V7Operation::Uqsub16(_) => CycleCount::Value(1),
-            V7Operation::Uqsub8(_) => CycleCount::Value(1),
-            V7Operation::Uqsad8(_) => CycleCount::Value(1),
-            V7Operation::Usada8(_) => CycleCount::Value(1),
-            V7Operation::Usad8(_) => CycleCount::Value(1),
-            V7Operation::Usat(_) | V7Operation::Usat16(_) => CycleCount::Value(1),
-            V7Operation::Usax(_) => CycleCount::Value(1),
-            V7Operation::Usub16(_) => CycleCount::Value(1),
-            V7Operation::Usub8(_) => CycleCount::Value(1),
-            V7Operation::Uxtab(_) => CycleCount::Value(1),
-            V7Operation::Uxtab16(_) => CycleCount::Value(1),
-            V7Operation::Uxtah(_) => CycleCount::Value(1),
-            V7Operation::Uxtb(_) => CycleCount::Value(1),
-            V7Operation::Uxtb16(_) => CycleCount::Value(1),
-            V7Operation::Uxth(_) => CycleCount::Value(1),
+            V7Operation::Udiv(_) => CycleCount2::Value(12),
+            V7Operation::Uhadd16(_) => CycleCount2::Value(1),
+            V7Operation::Uhadd8(_) => CycleCount2::Value(1),
+            V7Operation::Uhasx(_) => CycleCount2::Value(1),
+            V7Operation::Uhsax(_) => CycleCount2::Value(1),
+            V7Operation::Uhsub16(_) => CycleCount2::Value(1),
+            V7Operation::Uhsub8(_) => CycleCount2::Value(1),
+            V7Operation::Umaal(_) => CycleCount2::Value(1),
+            V7Operation::Umlal(_) => CycleCount2::Value(1),
+            V7Operation::Umull(_) => CycleCount2::Value(1),
+            V7Operation::Uqadd16(_) => CycleCount2::Value(1),
+            V7Operation::Uqadd8(_) => CycleCount2::Value(1),
+            V7Operation::Uqasx(_) => CycleCount2::Value(1),
+            V7Operation::Uqsax(_) => CycleCount2::Value(1),
+            V7Operation::Uqsub16(_) => CycleCount2::Value(1),
+            V7Operation::Uqsub8(_) => CycleCount2::Value(1),
+            V7Operation::Uqsad8(_) => CycleCount2::Value(1),
+            V7Operation::Usada8(_) => CycleCount2::Value(1),
+            V7Operation::Usad8(_) => CycleCount2::Value(1),
+            V7Operation::Usat(_) | V7Operation::Usat16(_) => CycleCount2::Value(1),
+            V7Operation::Usax(_) => CycleCount2::Value(1),
+            V7Operation::Usub16(_) => CycleCount2::Value(1),
+            V7Operation::Usub8(_) => CycleCount2::Value(1),
+            V7Operation::Uxtab(_) => CycleCount2::Value(1),
+            V7Operation::Uxtab16(_) => CycleCount2::Value(1),
+            V7Operation::Uxtah(_) => CycleCount2::Value(1),
+            V7Operation::Uxtb(_) => CycleCount2::Value(1),
+            V7Operation::Uxtb16(_) => CycleCount2::Value(1),
+            V7Operation::Uxth(_) => CycleCount2::Value(1),
             V7Operation::Wfe(_) => todo!("This requires a model of events"),
             V7Operation::Wfi(_) => todo!("This requires a model of interrupts"),
 
             // This assumes that we have no core running
-            V7Operation::Yield(_) => CycleCount::Value(1),
+            V7Operation::Yield(_) => CycleCount2::Value(1),
             V7Operation::Svc(_) => todo!(),
             V7Operation::Stc(_)
             | V7Operation::Mcr(_)

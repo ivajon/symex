@@ -1,4 +1,4 @@
-mod array_memory;
+pub mod array_memory;
 
 pub use array_memory::ArrayMemory;
 

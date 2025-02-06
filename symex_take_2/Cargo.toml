@@ -33,4 +33,6 @@ armv6-m-instruction-parser = "0.3.0-rc1"
 disarmv7 = {path = "../../disarmv7/" }
 hashbrown = "0.15.2"
 kd-tree = "0.6.0"
+fst = "0.4.7"
+regex-automata = { version = "0.1.9", features = ["transducer"] }
 

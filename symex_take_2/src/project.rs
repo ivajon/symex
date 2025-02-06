@@ -18,14 +18,14 @@ use crate::{
     },
     initiation::run_config::RunConfig,
     memory::MemoryError,
-    smt::DExpr,
+    smt::{DExpr, ProgramMemory},
     Composition,
     Endianness,
     Result as SuperResult,
     WordSize,
 };
 
-mod dwarf_helper;
+pub mod dwarf_helper;
 pub mod segments;
 
 pub type Result<T> = std::result::Result<T, ProjectError>;
@@ -240,7 +240,7 @@ impl<A: Architecture> Project<A> {
             symtab.insert(
                 match symbol.name() {
                     Ok(name) => name.to_owned(),
-                    Err(_) => continue, // ignore entry if name can not be read
+                    Err(_) => continue, // Ignore entry if name can not be read
                 },
                 symbol.address(),
             );
@@ -525,5 +525,38 @@ impl<A: Architecture> Debug for Project<A> {
             .field("word_size", &self.word_size)
             .field("endianness", &self.endianness)
             .finish()
+    }
+}
+
+impl<A: Architecture> ProgramMemory for &'static Project<A> {
+    fn get(
+        &self,
+        address: u64,
+        bits: usize,
+    ) -> std::result::Result<DataWord, crate::smt::MemoryError> {
+        if bits == self.get_word_size() {
+            // full word
+            Ok(self.get_word(address).unwrap())
+        } else if bits == self.get_word_size() / 2 {
+            // half word
+            Ok(self.get_half_word(address).unwrap().into())
+        } else if bits == 8 {
+            // byte
+            Ok(DataWord::Word8(self.get_byte(address).unwrap()))
+        } else {
+            todo!()
+        }
+    }
+
+    fn set(
+        &self,
+        _address: u64,
+        _dataword: DataWord,
+    ) -> std::result::Result<(), crate::smt::MemoryError> {
+        todo!("Project does not yet support caching writes to globals.")
+    }
+
+    fn address_in_range(&self, address: u64) -> bool {
+        (self as &'static Project<A>).address_in_range(address)
     }
 }

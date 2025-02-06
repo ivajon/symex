@@ -10,19 +10,15 @@
 //! to other memory models, and in general this memory model is slower compared
 //! to e.g. object memory. However, it may provide better performance in certain
 //! situations.
+use general_assembly::prelude::DataWord;
 use hashbrown::HashMap;
 use tracing::trace;
 
 use super::{MemoryError, BITS_IN_BYTE};
 use crate::{
-    smt::{
-        smt_boolector::{Boolector, BoolectorSolverContext},
-        DArray,
-        DContext,
-        DExpr,
-        SmtMap,
-        SolverError,
-    },
+    arch::Architecture,
+    project::{self, Project},
+    smt::{smt_boolector::Boolector, DArray, DContext, DExpr, ProgramMemory, SmtMap},
     Endianness,
     WordSize,
 };
@@ -159,24 +155,26 @@ impl ArrayMemory {
 }
 
 #[derive(Debug, Clone)]
-pub struct BoolectorMemory {
+pub struct BoolectorMemory<A: Architecture> {
     ram: ArrayMemory,
     register_file: HashMap<String, DExpr>,
     flags: HashMap<String, DExpr>,
     variables: HashMap<String, DExpr>,
     // TODO: Expose these.
     locals: HashMap<String, DExpr>,
+    program_memory: &'static Project<A>,
     word_size: usize,
     pc: u64,
 }
 
-impl SmtMap for BoolectorMemory {
-    type Idx = DExpr;
-    type ReturnValue = DExpr;
+impl<A: Architecture> SmtMap for BoolectorMemory<A> {
+    type Expression = DExpr;
+    type ProgramMemory = &'static Project<A>;
     type SMT = Boolector;
 
     fn new(
         smt: Self::SMT,
+        program_memory: &'static Project<A>,
         word_size: usize,
         endianness: Endianness,
     ) -> Result<Self, crate::GAError> {
@@ -207,6 +205,7 @@ impl SmtMap for BoolectorMemory {
             flags: HashMap::new(),
             variables: HashMap::new(),
             locals: HashMap::new(),
+            program_memory,
             word_size,
             pc: 0,
         })
@@ -214,21 +213,32 @@ impl SmtMap for BoolectorMemory {
 
     fn get(
         &self,
-        idx: &Self::Idx,
+        idx: &Self::Expression,
         size: usize,
-    ) -> Result<Self::ReturnValue, crate::smt::MemoryError> {
+    ) -> Result<Self::Expression, crate::smt::MemoryError> {
+        if let Some(address) = idx.get_constant() {
+            if !self.program_memory.address_in_range(address) {
+                return Ok(self.ram.read(idx, size as u32)?);
+            }
+            return Ok(match self.program_memory.get(address, size as u32)? {
+                DataWord::Word8(value) => self.from_u64(value as u64, 8),
+                DataWord::Word16(value) => self.from_u64(value as u64, 16),
+                DataWord::Word32(value) => self.from_u64(value as u64, 32),
+                DataWord::Word64(value) => self.from_u64(value as u64, 32),
+            });
+        }
         Ok(self.ram.read(idx, size as u32)?)
     }
 
     fn set(
         &mut self,
-        idx: &Self::Idx,
-        value: Self::ReturnValue,
+        idx: &Self::Expression,
+        value: Self::Expression,
     ) -> Result<(), crate::smt::MemoryError> {
         Ok(self.ram.write(idx, value)?)
     }
 
-    fn get_pc(&self) -> Result<Self::ReturnValue, crate::smt::MemoryError> {
+    fn get_pc(&self) -> Result<Self::Expression, crate::smt::MemoryError> {
         Ok(self.ram.ctx.from_u64(self.pc, 32))
     }
 
@@ -240,13 +250,13 @@ impl SmtMap for BoolectorMemory {
     fn set_flag(
         &mut self,
         idx: &str,
-        value: Self::ReturnValue,
+        value: Self::Expression,
     ) -> Result<(), crate::smt::MemoryError> {
         self.flags.insert(idx.to_string(), value);
         Ok(())
     }
 
-    fn get_flag(&mut self, idx: &str) -> Result<Self::ReturnValue, crate::smt::MemoryError> {
+    fn get_flag(&mut self, idx: &str) -> Result<Self::Expression, crate::smt::MemoryError> {
         let ret = self
             .flags
             .get(idx)
@@ -259,13 +269,13 @@ impl SmtMap for BoolectorMemory {
     fn set_register(
         &mut self,
         idx: &str,
-        value: Self::ReturnValue,
+        value: Self::Expression,
     ) -> Result<(), crate::smt::MemoryError> {
         self.register_file.insert(idx.to_string(), value);
         Ok(())
     }
 
-    fn get_register(&mut self, idx: &str) -> Result<Self::ReturnValue, crate::smt::MemoryError> {
+    fn get_register(&mut self, idx: &str) -> Result<Self::Expression, crate::smt::MemoryError> {
         let ret = self
             .register_file
             .get(idx)
@@ -276,12 +286,20 @@ impl SmtMap for BoolectorMemory {
         Ok(ret)
     }
 
-    fn from_u64(&self, value: u64, size: usize) -> Self::ReturnValue {
+    fn from_u64(&self, value: u64, size: usize) -> Self::Expression {
         self.ram.ctx.from_u64(value, size as u32)
     }
 
-    fn from_bool(&self, value: bool) -> Self::ReturnValue {
+    fn from_bool(&self, value: bool) -> Self::Expression {
         self.ram.ctx.from_bool(value)
+    }
+
+    fn unconstrained(&self, name: &str, size: usize) -> Self::Expression {
+        self.ram.ctx.unconstrained(size as u32, name)
+    }
+
+    fn get_ptr_size(&self) -> usize {
+        self.program_memory.get_ptr_size() as usize
     }
 }
 

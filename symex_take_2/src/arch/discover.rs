@@ -1,10 +1,10 @@
-use object::{Architecture, File, Object};
+use object::{File, Object};
 
 use super::{
     arm::{v6::ArmV6M, v7::ArmV7EM},
     ArchError,
+    Architecture,
     SupportedArchitechture,
-    SupportedArchitecture,
 };
 
 impl SupportedArchitechture {
@@ -17,7 +17,7 @@ impl SupportedArchitechture {
         // TODO: Remove this allow when risc-v is done.
         #[allow(clippy::single_match)]
         match architecture {
-            Architecture::Arm => {
+            object::Architecture::Arm => {
                 // Run the paths with architecture specific data.
                 if let Some(v7) = ArmV7EM::discover(obj_file)? {
                     return Ok(Self::ArmV7EM(v7));

@@ -1,42 +1,53 @@
 //! Describes the VM for general assembly
 
-use super::{state::GAState, GAExecutor, PathResult};
+use super::{hooks::HookContainer, state::GAState2, GAExecutor, PathResult};
 use crate::{
-    arch::Architecture,
     path_selection::{DFSPathSelection, Path},
     project::Project,
-    smt::{DContext, DSolver},
+    smt::{SmtMap, SmtSolver},
+    Composition,
     Result,
 };
 
 #[derive(Debug)]
-pub struct VM<A: Architecture> {
-    pub project: &'static Project<A>,
-    pub paths: DFSPathSelection<A>,
+pub struct VM<C: Composition> {
+    pub project: <C::Memory as SmtMap>::ProgramMemory,
+    pub paths: DFSPathSelection<C>,
 }
 
-impl<A: Architecture> VM<A> {
+impl<C: Composition> VM<C> {
     pub fn new(
-        project: &'static Project<A>,
-        ctx: &'static DContext,
+        project: <C::Memory as SmtMap>::ProgramMemory,
+        ctx: &'static C::SMT,
         fn_name: &str,
         end_pc: u64,
-        architecture: A,
+        state_container: C::StateContainer,
+        hooks: HookContainer<C>,
     ) -> Result<Self> {
         let mut vm = Self {
-            project,
+            project: project.clone(),
             paths: DFSPathSelection::new(),
         };
 
-        let solver = DSolver::new(ctx);
-        let state = GAState::<A>::new(ctx, project, solver, fn_name, end_pc, architecture)?;
+        let state = GAState2::<C>::new(
+            ctx.clone(),
+            ctx.clone(),
+            project,
+            hooks,
+            fn_name,
+            end_pc,
+            state_container,
+        )?;
 
         vm.paths.save_path(Path::new(state, None));
 
         Ok(vm)
     }
 
-    pub fn new_with_state(project: &'static Project<A>, state: GAState<A>) -> Self {
+    pub fn new_with_state(
+        project: <C::Memory as SmtMap>::ProgramMemory,
+        state: GAState2<C>,
+    ) -> Self {
         let mut vm = Self {
             project,
             paths: DFSPathSelection::new(),
@@ -47,10 +58,10 @@ impl<A: Architecture> VM<A> {
         vm
     }
 
-    pub fn run(&mut self) -> Result<Option<(PathResult, GAState<A>)>> {
+    pub fn run(&mut self) -> Result<Option<(PathResult<C>, GAState2<C>)>> {
         if let Some(path) = self.paths.get_path() {
             // try stuff
-            let mut executor = GAExecutor::from_state(path.state, self, self.project);
+            let mut executor = GAExecutor::from_state(path.state, self, self.project.clone());
 
             for constraint in path.constraints {
                 executor.state.constraints.assert(&constraint);

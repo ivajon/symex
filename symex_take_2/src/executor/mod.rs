@@ -6,16 +6,16 @@ use general_assembly::{
     prelude::{DataWord, Operand, Operation},
     shift::Shift,
 };
-use instruction::Instruction;
-use state::{ContinueInsideInstruction, GAState, HookOrInstruction};
+use hooks::PCHook2;
+use instruction::Instruction2;
+use state::{ContinueInsideInstruction2, GAState2, HookOrInstruction2};
 use tracing::{debug, trace};
 use vm::VM;
 
 use crate::{
-    arch::Architecture,
     path_selection::Path,
-    project::{PCHook, Project},
-    smt::{smt_boolector::BoolectorSolverContext, DExpr, SolverError},
+    smt::{ProgramMemory, SmtExpr, SmtMap, SmtSolver, SolverError},
+    Composition,
     Result,
 };
 
@@ -24,30 +24,34 @@ pub mod instruction;
 pub mod state;
 pub mod vm;
 
-pub struct GAExecutor<'vm, A: Architecture> {
-    pub vm: &'vm mut VM<A>,
-    pub state: GAState<A>,
-    pub project: &'static Project<A>,
+pub struct GAExecutor<'vm, C: Composition> {
+    pub vm: &'vm mut VM<C>,
+    pub state: GAState2<C>,
+    pub project: <C::Memory as SmtMap>::ProgramMemory,
     //current_instruction: Option<Instruction>,
     current_operation_index: usize,
 }
 
-pub enum PathResult {
-    Success(Option<DExpr>),
+pub enum PathResult<C: Composition> {
+    Success(Option<C::SmtExpression>),
     Failure(&'static str),
     AssumptionUnsat,
     Suppress,
 }
 
-struct AddWithCarryResult {
-    carry_out: DExpr,
-    overflow: DExpr,
-    result: DExpr,
+struct AddWithCarryResult<E: SmtExpr> {
+    carry_out: E,
+    overflow: E,
+    result: E,
 }
 
-impl<'vm, A: Architecture> GAExecutor<'vm, A> {
+impl<'vm, C: Composition> GAExecutor<'vm, C> {
     /// Construct an executor from a state.
-    pub fn from_state(state: GAState<A>, vm: &'vm mut VM<A>, project: &'static Project<A>) -> Self {
+    pub fn from_state(
+        state: GAState2<C>,
+        vm: &'vm mut VM<C>,
+        project: <C::Memory as SmtMap>::ProgramMemory,
+    ) -> Self {
         Self {
             vm,
             state,
@@ -57,7 +61,7 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
         }
     }
 
-    pub fn resume_execution(&mut self) -> Result<PathResult> {
+    pub fn resume_execution(&mut self) -> Result<PathResult<C>> {
         let possible_continue = self.state.continue_in_instruction.to_owned();
 
         if let Some(i) = possible_continue {
@@ -68,30 +72,30 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
 
         loop {
             let instruction = match self.state.get_next_instruction()? {
-                HookOrInstruction::Instruction(v) => v,
-                HookOrInstruction::PcHook(hook) => match hook {
-                    PCHook::Continue => {
+                HookOrInstruction2::Instruction(v) => v,
+                HookOrInstruction2::PcHook(hook) => match hook {
+                    PCHook2::Continue => {
                         debug!("Continuing");
                         let lr = self.state.get_register("LR".to_owned()).unwrap();
                         self.state.set_register("PC".to_owned(), lr)?;
                         continue;
                     }
-                    PCHook::EndSuccess => {
+                    PCHook2::EndSuccess => {
                         debug!("Symbolic execution ended successfully");
                         self.state.increment_cycle_count();
                         return Ok(PathResult::Success(None));
                     }
-                    PCHook::EndFailure(reason) => {
+                    PCHook2::EndFailure(reason) => {
                         debug!("Symbolic execution ended unsuccessfully");
                         let data = *reason;
                         self.state.increment_cycle_count();
                         return Ok(PathResult::Failure(data));
                     }
-                    PCHook::Suppress => {
+                    PCHook2::Suppress => {
                         self.state.increment_cycle_count();
                         return Ok(PathResult::Suppress);
                     }
-                    PCHook::Intrinsic(f) => {
+                    PCHook2::Intrinsic(f) => {
                         f(&mut self.state)?;
 
                         // Set last instruction to empty to no count instruction twice
@@ -112,7 +116,7 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
     }
 
     // Fork execution. Will create a new path with `constraint`.
-    fn fork(&mut self, constraint: DExpr) -> Result<()> {
+    fn fork(&mut self, constraint: C::SmtExpression) -> Result<()> {
         trace!("Save backtracking path: constraint={:?}", constraint);
         let forked_state = self.state.clone();
         let path = Path::new(forked_state, Some(constraint));
@@ -122,69 +126,61 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
     }
 
     /// Creates smt expression from a dataword.
-    fn get_dexpr_from_dataword(&mut self, data: DataWord) -> DExpr {
+    fn get_dexpr_from_dataword(&mut self, data: DataWord) -> C::SmtExpression {
         match data {
-            DataWord::Word64(v) => self.state.ctx.from_u64(v, 64),
-            DataWord::Word32(v) => self.state.ctx.from_u64(v as u64, 32),
-            DataWord::Word16(v) => self.state.ctx.from_u64(v as u64, 16),
-            DataWord::Word8(v) => self.state.ctx.from_u64(v as u64, 8),
+            DataWord::Word64(v) => self.state.memory.from_u64(v, 64),
+            DataWord::Word32(v) => self.state.memory.from_u64(v as u64, 32),
+            DataWord::Word16(v) => self.state.memory.from_u64(v as u64, 16),
+            DataWord::Word8(v) => self.state.memory.from_u64(v as u64, 8),
         }
     }
 
     /// Retrieves a smt expression representing value stored at `address` in
     /// memory.
-    fn get_memory(&mut self, address: u64, bits: u32) -> Result<DExpr> {
+    fn get_memory(&mut self, address: u64, bits: u32) -> Result<C::SmtExpression> {
         trace!("Getting memory addr: {:?}", address);
-        // Check for hook and return early
-        if let Some(hook) = self.project.get_memory_read_hook(address) {
-            return Ok(hook(&mut self.state, address)?);
-        }
-
-        if self.project.address_in_range(address) {
-            if bits == self.project.get_word_size() {
-                // full word
-                Ok(self.get_dexpr_from_dataword(self.project.get_word(address)?))
-            } else if bits == self.project.get_word_size() / 2 {
-                // half word
-                Ok(self.get_dexpr_from_dataword(self.project.get_half_word(address)?.into()))
-            } else if bits == 8 {
-                // byte
-                Ok(self
-                    .state
-                    .ctx
-                    .from_u64(self.project.get_byte(address)? as u64, 8))
-            } else {
-                todo!()
+        let addr = self
+            .state
+            .memory
+            .from_u64(address, self.project.get_ptr_size() as usize);
+        match self.state.reader().read_memory(addr, bits as usize) {
+            hooks::ResultOrHook::Hook(hook) => hook(&mut self.state, address),
+            hooks::ResultOrHook::Hooks(hooks) => {
+                if hooks.len() == 1 {
+                    return hooks[0](&mut self.state, address);
+                }
+                todo!("Handle multiple hooks.");
+                //for hook in hooks {
+                //    hook(&mut self.state, address)?;
+                //}
             }
-        } else {
-            let symbolic_address = self
-                .state
-                .ctx
-                .from_u64(address, self.project.get_ptr_size());
-            let data = self.state.memory.read(&symbolic_address, bits)?;
-            Ok(data)
+            hooks::ResultOrHook::Result(result) => Ok(result?),
         }
     }
 
     /// Sets the memory at `address` to `data`.
-    fn set_memory(&mut self, data: DExpr, address: u64, bits: u32) -> Result<()> {
+    fn set_memory(&mut self, data: C::SmtExpression, address: u64, bits: u32) -> Result<()> {
         trace!("Setting memory addr: {:?}", address);
-        // check for hook and return early
-        if let Some(hook) = self.project.get_memory_write_hook(address) {
-            return Ok(hook(&mut self.state, address, data, bits)?);
-        }
-
-        if self.project.address_in_range(address) {
-            Err(super::GAError::WritingToStaticMemoryProhibited)
-        } else {
-            let symbolic_address = self
-                .state
-                .ctx
-                .from_u64(address, self.project.get_ptr_size());
-            self.state
-                .memory
-                .write(&symbolic_address, data.resize_unsigned(bits).simplify())?;
-            Ok(())
+        let addr = self
+            .state
+            .memory
+            .from_u64(address, self.project.get_ptr_size() as usize);
+        match self
+            .state
+            .writer()
+            .write_memory(addr, data.resize_unsigned(bits))
+        {
+            hooks::ResultOrHook::Hook(hook) => hook(&mut self.state, data, address),
+            hooks::ResultOrHook::Hooks(hooks) => {
+                if hooks.len() == 1 {
+                    return hooks[0](&mut self.state, data, address);
+                }
+                todo!("Handle multiple hooks (write).");
+                //for hook in hooks {
+                //    hook(&mut self.state, address)?;
+                //}
+            }
+            hooks::ResultOrHook::Result(result) => Ok(result?),
         }
     }
 
@@ -192,8 +188,8 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
     pub(crate) fn get_operand_value(
         &mut self,
         operand: &Operand,
-        local: &HashMap<String, DExpr>,
-    ) -> Result<DExpr> {
+        local: &HashMap<String, C::SmtExpression>,
+    ) -> Result<C::SmtExpression> {
         let ret = match operand {
             Operand::Register(name) => Ok(self.state.get_register(name.to_owned())?),
             Operand::Immediate(v) => Ok(self.get_dexpr_from_dataword(v.to_owned())),
@@ -215,11 +211,8 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
                 self.get_memory(address, *width)
             }
             Operand::Flag(f) => {
-                let value = self.state.get_flag(f.clone());
-                match value {
-                    Some(value) => Ok(value.resize_unsigned(self.project.get_word_size())),
-                    None => todo!(),
-                }
+                let value = self.state.get_flag(f.clone())?;
+                Ok(value.resize_unsigned(self.project.get_word_size() as u32))
             }
         };
 
@@ -230,8 +223,8 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
     pub(crate) fn set_operand_value(
         &mut self,
         operand: &Operand,
-        value: DExpr,
-        local: &mut HashMap<String, DExpr>,
+        value: C::SmtExpression,
+        local: &mut HashMap<String, C::SmtExpression>,
     ) -> Result<()> {
         match operand {
             Operand::Register(v) => {
@@ -269,7 +262,11 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
         Ok(())
     }
 
-    fn resolve_address(&mut self, address: DExpr, local: &HashMap<String, DExpr>) -> Result<u64> {
+    fn resolve_address(
+        &mut self,
+        address: C::SmtExpression,
+        local: &HashMap<String, C::SmtExpression>,
+    ) -> Result<u64> {
         match &address.get_constant() {
             Some(addr) => Ok(*addr),
             None => {
@@ -303,7 +300,7 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
                             .len()
                             - 1
                     {
-                        self.state.continue_in_instruction = Some(ContinueInsideInstruction {
+                        self.state.continue_in_instruction = Some(ContinueInsideInstruction2 {
                             instruction: self
                                 .state
                                 .current_instruction
@@ -329,7 +326,7 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
 
     fn continue_executing_instruction(
         &mut self,
-        inst_to_continue: &ContinueInsideInstruction<A>,
+        inst_to_continue: &ContinueInsideInstruction2<C>,
     ) -> Result<()> {
         let mut local = inst_to_continue.local.to_owned();
         self.state.current_instruction = Some(inst_to_continue.instruction.to_owned());
@@ -342,7 +339,7 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
     }
 
     /// Execute a single instruction.
-    pub(crate) fn execute_instruction(&mut self, i: &Instruction<A>) -> Result<()> {
+    pub(crate) fn execute_instruction(&mut self, i: &Instruction2<C>) -> Result<()> {
         // update last pc
         let new_pc = self.state.get_register("PC".to_owned())?;
         self.state.last_pc = new_pc.get_constant().unwrap();
@@ -350,12 +347,10 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
         // Always increment pc before executing the operations
         self.state.set_register(
             "PC".to_owned(),
-            new_pc.add(
-                &self
-                    .state
-                    .ctx
-                    .from_u64((i.instruction_size / 8) as u64, self.project.get_ptr_size()),
-            ),
+            new_pc.add(&self.state.memory.from_u64(
+                (i.instruction_size / 8) as u64,
+                self.project.get_ptr_size() as usize,
+            )),
         )?;
 
         // reset has branched before execution of instruction.
@@ -388,7 +383,7 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
 
         if should_run {
             // initiate local variable storage
-            let mut local: HashMap<String, DExpr> = HashMap::new();
+            let mut local: HashMap<String, _> = HashMap::new();
             for (n, operation) in i.operations.iter().enumerate() {
                 self.current_operation_index = n;
                 self.execute_operation(operation, &mut local)?;
@@ -403,7 +398,7 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
     pub(crate) fn execute_operation(
         &mut self,
         operation: &Operation,
-        local: &mut HashMap<String, DExpr>,
+        local: &mut HashMap<String, C::SmtExpression>,
     ) -> Result<()> {
         trace!("Executing operation: {:?}", operation);
         match operation {
@@ -513,29 +508,32 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
                 let value = self.get_operand_value(operand, local)?;
                 let shift_amount = self.get_operand_value(shift_n, local)?;
                 let result = match shift_t {
-                    Shift::Lsl => value.sll(&shift_amount),
-                    Shift::Lsr => value.srl(&shift_amount),
-                    Shift::Asr => value.sra(&shift_amount),
+                    Shift::Lsl | Shift::Lsr | Shift::Asr => {
+                        value.shift(&shift_amount, shift_t.clone())
+                    }
                     Shift::Rrx => {
                         let ret = value
-                            .and(&shift_amount.sub(&self.state.ctx.from_u64(1, 32)))
-                            .srl(&self.state.ctx.from_u64(1, 32))
+                            .and(&shift_amount.sub(&self.state.memory.from_u64(1, 32)))
+                            .shift(&self.state.memory.from_u64(1, 32), Shift::Lsr)
                             .simplify();
                         ret.or(&self
                             .state
                             // Set the carry bit right above the last bit
                             .get_flag("C".to_owned())
                             .unwrap()
-                            .sll(&shift_amount.add(&self.state.ctx.from_u64(1, 32))))
+                            .shift(
+                                &shift_amount.add(&self.state.memory.from_u64(1, 32)),
+                                Shift::Lsl,
+                            ))
                     }
                     Shift::Ror => {
-                        let word_size = self.state.ctx.from_u64(
+                        let word_size = self.state.memory.from_u64(
                             self.project.get_word_size() as u64,
-                            self.project.get_word_size(),
+                            self.project.get_word_size() as usize,
                         );
                         value
-                            .srl(&shift_amount)
-                            .or(&value.srl(&word_size.sub(&shift_amount)))
+                            .shift(&shift_amount, Shift::Lsr)
+                            .or(&value.shift(&word_size.sub(&shift_amount), Shift::Lsr))
                     }
                 };
                 self.set_operand_value(destination, result, local)?;
@@ -547,7 +545,7 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
             } => {
                 let value = self.get_operand_value(operand, local)?;
                 let shift_amount = self.get_operand_value(shift, local)?;
-                let result = value.sll(&shift_amount);
+                let result = value.shift(&shift_amount, Shift::Lsl);
                 self.set_operand_value(destination, result, local)?;
             }
             Operation::Srl {
@@ -557,7 +555,7 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
             } => {
                 let value = self.get_operand_value(operand, local)?;
                 let shift_amount = self.get_operand_value(shift, local)?;
-                let result = value.srl(&shift_amount);
+                let result = value.shift(&shift_amount, Shift::Lsr);
                 self.set_operand_value(destination, result, local)?;
             }
             Operation::Sra {
@@ -567,7 +565,7 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
             } => {
                 let value = self.get_operand_value(operand, local)?;
                 let shift_amount = self.get_operand_value(shift, local)?;
-                let result = value.sra(&shift_amount);
+                let result = value.shift(&shift_amount, Shift::Asr);
                 self.set_operand_value(destination, result, local)?;
             }
             Operation::Sror {
@@ -575,13 +573,15 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
                 operand,
                 shift,
             } => {
-                let word_size = self.state.ctx.from_u64(
+                let word_size = self.state.memory.from_u64(
                     self.project.get_word_size() as u64,
-                    self.project.get_word_size(),
+                    self.project.get_word_size() as usize,
                 );
                 let value = self.get_operand_value(operand, local)?;
                 let shift = self.get_operand_value(shift, local)?.srem(&word_size);
-                let result = value.srl(&shift).or(&value.sll(&word_size.sub(&shift)));
+                let result = value
+                    .shift(&shift, Shift::Lsr)
+                    .or(&value.shift(&word_size.sub(&shift), Shift::Lsl));
                 self.set_operand_value(destination, result, local)?;
             }
             Operation::ConditionalJump {
@@ -610,7 +610,7 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
                     false_possible
                 );
 
-                let destination: DExpr = match (true_possible, false_possible) {
+                let destination: C::SmtExpression = match (true_possible, false_possible) {
                     (true, true) => {
                         if self.current_operation_index
                             < (self
@@ -622,7 +622,7 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
                                 .len()
                                 - 1)
                         {
-                            self.state.continue_in_instruction = Some(ContinueInsideInstruction {
+                            self.state.continue_in_instruction = Some(ContinueInsideInstruction2 {
                                 instruction: self
                                     .state
                                     .current_instruction
@@ -655,14 +655,17 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
                 let value = self.get_operand_value(operand, local)?;
                 let shift = self
                     .state
-                    .ctx
+                    .memory
                     .from_u64((self.project.get_word_size() - 1) as u64, 32);
-                let result = value.srl(&shift).resize_unsigned(1);
+                let result = value.shift(&shift, Shift::Lsr).resize_unsigned(1);
                 self.state.set_flag("N".to_owned(), result);
             }
             Operation::SetZFlag(operand) => {
                 let value = self.get_operand_value(operand, local)?;
-                let result = value.eq(&self.state.ctx.zero(self.project.get_word_size()));
+                let result = value.eq(&self
+                    .state
+                    .memory
+                    .from_u64(0, self.project.get_word_size() as usize));
                 self.state.set_flag("Z".to_owned(), result);
             }
             Operation::SetCFlag {
@@ -673,7 +676,10 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
             } => {
                 let op1 = self.get_operand_value(operand1, local)?;
                 let op2 = self.get_operand_value(operand2, local)?;
-                let one = self.state.ctx.from_u64(1, self.project.get_word_size());
+                let one = self
+                    .state
+                    .memory
+                    .from_u64(1, self.project.get_word_size() as usize);
 
                 let result = match (sub, carry) {
                     (true, true) => {
@@ -718,7 +724,10 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
             } => {
                 let op1 = self.get_operand_value(operand1, local)?;
                 let op2 = self.get_operand_value(operand2, local)?;
-                let one = self.state.ctx.from_u64(1, self.project.get_word_size());
+                let one = self
+                    .state
+                    .memory
+                    .from_u64(1, self.project.get_word_size() as usize);
 
                 let result = match (sub, carry) {
                     (true, true) => {
@@ -764,7 +773,7 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
             } => {
                 let op = self.get_operand_value(operand, local)?;
                 let valid_bits = op.resize_unsigned(*bits);
-                let result = valid_bits.sign_ext(self.project.get_word_size());
+                let result = valid_bits.sign_ext(self.project.get_word_size() as u32);
                 self.set_operand_value(destination, result, local)?;
             }
             Operation::Resize {
@@ -787,7 +796,7 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
                     .state
                     .get_flag("C".to_owned())
                     .unwrap()
-                    .zero_ext(self.project.get_word_size());
+                    .zero_ext(self.project.get_word_size() as u32);
                 let result =
                     add_with_carry(&op1, &op2, &carry, self.project.get_word_size()).result;
                 self.set_operand_value(destination, result, local)?;
@@ -796,52 +805,69 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
             Operation::SetCFlagShiftLeft { operand, shift } => {
                 let op = self
                     .get_operand_value(operand, local)?
-                    .zero_ext(1 + self.project.get_word_size());
+                    .zero_ext(1 + self.project.get_word_size() as u32);
                 let shift = self
                     .get_operand_value(shift, local)?
-                    .zero_ext(1 + self.project.get_word_size());
-                let result = op.sll(&shift);
+                    .zero_ext(1 + self.project.get_word_size() as u32);
+                let result = op.shift(&shift, Shift::Lsl);
                 let carry = result
-                    .srl(&self.state.ctx.from_u64(
-                        self.project.get_word_size() as u64,
-                        self.project.get_word_size() + 1,
-                    ))
+                    .shift(
+                        &self.state.memory.from_u64(
+                            self.project.get_word_size() as u64,
+                            self.project.get_word_size() as usize + 1,
+                        ),
+                        Shift::Lsr,
+                    )
                     .resize_unsigned(1);
                 self.state.set_flag("C".to_owned(), carry);
             }
             Operation::SetCFlagSrl { operand, shift } => {
                 let op = self
                     .get_operand_value(operand, local)?
-                    .zero_ext(1 + self.project.get_word_size())
-                    .sll(&self.state.ctx.from_u64(1, 1 + self.project.get_word_size()));
+                    .zero_ext(1 + self.project.get_word_size() as u32)
+                    .shift(
+                        &self
+                            .state
+                            .memory
+                            .from_u64(1, 1 + self.project.get_word_size() as usize),
+                        Shift::Lsl,
+                    );
                 let shift = self
                     .get_operand_value(shift, local)?
-                    .zero_ext(1 + self.project.get_word_size());
-                let result = op.srl(&shift);
+                    .zero_ext(1 + self.project.get_word_size() as u32);
+                let result = op.shift(&shift, Shift::Lsr);
                 let carry = result.resize_unsigned(1);
                 self.state.set_flag("C".to_owned(), carry);
             }
             Operation::SetCFlagSra { operand, shift } => {
                 let op = self
                     .get_operand_value(operand, local)?
-                    .zero_ext(1 + self.project.get_word_size())
-                    .sll(&self.state.ctx.from_u64(1, 1 + self.project.get_word_size()));
+                    .zero_ext(1 + self.project.get_word_size() as u32)
+                    .shift(
+                        &self
+                            .state
+                            .memory
+                            .from_u64(1, 1 + self.project.get_word_size() as usize),
+                        Shift::Lsl,
+                    );
                 let shift = self
                     .get_operand_value(shift, local)?
-                    .zero_ext(1 + self.project.get_word_size());
-                let result = op.sra(&shift);
+                    .zero_ext(1 + self.project.get_word_size() as u32);
+                let result = op.shift(&shift, Shift::Asr);
                 let carry = result.resize_unsigned(1);
                 self.state.set_flag("C".to_owned(), carry);
             }
             Operation::SetCFlagRor(operand) => {
                 // this is right for armv6-m but may be wrong for other architectures
                 let result = self.get_operand_value(operand, local)?;
-                let word_size_minus_one = self.state.ctx.from_u64(
+                let word_size_minus_one = self.state.memory.from_u64(
                     self.project.get_word_size() as u64 - 1,
-                    self.project.get_word_size(),
+                    self.project.get_word_size() as usize,
                 );
                 // result = srl(op, shift) OR sll(op, word_size - shift)
-                let c = result.srl(&word_size_minus_one).resize_unsigned(1);
+                let c = result
+                    .shift(&word_size_minus_one, Shift::Lsr)
+                    .resize_unsigned(1);
                 self.state.set_flag("C".to_owned(), c);
             }
             Operation::CountOnes {
@@ -849,7 +875,8 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
                 operand,
             } => {
                 let operand = self.get_operand_value(operand, local)?;
-                let result = count_ones(&operand, self.state.ctx, self.project.get_word_size());
+                let result =
+                    count_ones(&operand, &self.state, self.project.get_word_size() as usize);
                 self.set_operand_value(destination, result, local)?;
             }
             Operation::CountZeroes {
@@ -857,7 +884,8 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
                 operand,
             } => {
                 let operand = self.get_operand_value(operand, local)?;
-                let result = count_zeroes(&operand, self.state.ctx, self.project.get_word_size());
+                let result =
+                    count_zeroes(&operand, &self.state, self.project.get_word_size() as usize);
                 self.set_operand_value(destination, result, local)?;
             }
             Operation::CountLeadingOnes {
@@ -865,8 +893,11 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
                 operand,
             } => {
                 let operand = self.get_operand_value(operand, local)?;
-                let result =
-                    count_leading_ones(&operand, self.state.ctx, self.project.get_word_size());
+                let result = count_leading_ones(
+                    &operand,
+                    &self.state,
+                    self.project.get_word_size() as usize,
+                );
                 self.set_operand_value(destination, result, local)?;
             }
             Operation::CountLeadingZeroes {
@@ -874,8 +905,11 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
                 operand,
             } => {
                 let operand = self.get_operand_value(operand, local)?;
-                let result =
-                    count_leading_zeroes(&operand, self.state.ctx, self.project.get_word_size());
+                let result = count_leading_zeroes(
+                    &operand,
+                    &self.state,
+                    self.project.get_word_size() as usize,
+                );
                 self.set_operand_value(destination, result, local)?;
             }
             Operation::BitFieldExtract {
@@ -897,13 +931,19 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
                     (1 << (*stop_bit - *start_bit + 1)) - 1
                 };
                 let operand = operand
-                    .srl(
+                    .shift(
                         &self
                             .state
-                            .ctx
-                            .from_u64(*start_bit as u64, self.project.get_word_size()),
+                            .memory
+                            .from_u64(*start_bit as u64, self.project.get_word_size() as usize),
+                        Shift::Lsr,
                     )
-                    .and(&self.state.ctx.from_u64(mask, self.project.get_word_size()))
+                    .and(
+                        &self
+                            .state
+                            .memory
+                            .from_u64(mask, self.project.get_word_size() as usize),
+                    )
                     .simplify();
                 self.set_operand_value(destination, operand, local)?;
             }
@@ -912,50 +952,72 @@ impl<'vm, A: Architecture> GAExecutor<'vm, A> {
     }
 }
 
-fn count_ones(input: &DExpr, ctx: &BoolectorSolverContext, word_size: u32) -> DExpr {
-    let mut count = ctx.from_u64(0, word_size);
-    let mask = ctx.from_u64(1, word_size);
+fn count_ones<C: Composition>(
+    input: &C::SmtExpression,
+    ctx: &GAState2<C>,
+    word_size: usize,
+) -> C::SmtExpression {
+    let mut count = ctx.memory.from_u64(0, word_size);
+    let mask = ctx.memory.from_u64(1, word_size);
     for n in 0..word_size {
-        let symbolic_n = ctx.from_u64(n as u64, word_size);
-        let to_add = input.srl(&symbolic_n).and(&mask);
+        let symbolic_n = ctx.memory.from_u64(n as u64, word_size);
+        let to_add = input.shift(&symbolic_n, Shift::Lsr).and(&mask);
         count = count.add(&to_add);
     }
     count
 }
 
-fn count_zeroes(input: &DExpr, ctx: &BoolectorSolverContext, word_size: u32) -> DExpr {
+fn count_zeroes<C: Composition>(
+    input: &C::SmtExpression,
+    ctx: &GAState2<C>,
+    word_size: usize,
+) -> C::SmtExpression {
     let input = input.not();
-    let mut count = ctx.from_u64(0, word_size);
-    let mask = ctx.from_u64(1, word_size);
+    let mut count = ctx.memory.from_u64(0, word_size);
+    let mask = ctx.memory.from_u64(1, word_size);
     for n in 0..word_size {
-        let symbolic_n = ctx.from_u64(n as u64, word_size);
-        let to_add = input.srl(&symbolic_n).and(&mask);
+        let symbolic_n = ctx.memory.from_u64(n as u64, word_size);
+        let to_add = input.shift(&symbolic_n, Shift::Lsr).and(&mask);
         count = count.add(&to_add);
     }
     count
 }
 
-fn count_leading_ones(input: &DExpr, ctx: &BoolectorSolverContext, word_size: u32) -> DExpr {
-    let mut count = ctx.from_u64(0, word_size);
-    let mut stop_count_mask = ctx.from_u64(1, word_size);
-    let mask = ctx.from_u64(1, word_size);
+fn count_leading_ones<C: Composition>(
+    input: &C::SmtExpression,
+    ctx: &GAState2<C>,
+    word_size: usize,
+) -> C::SmtExpression {
+    let mut count = ctx.memory.from_u64(0, word_size);
+    let mut stop_count_mask = ctx.memory.from_u64(1, word_size);
+    let mask = ctx.memory.from_u64(1, word_size);
     for n in (0..word_size).rev() {
-        let symbolic_n = ctx.from_u64(n as u64, word_size);
-        let to_add = input.srl(&symbolic_n).and(&mask).and(&stop_count_mask);
+        let symbolic_n = ctx.memory.from_u64(n as u64, word_size);
+        let to_add = input
+            .shift(&symbolic_n, Shift::Lsr)
+            .and(&mask)
+            .and(&stop_count_mask);
         stop_count_mask = to_add.clone();
         count = count.add(&to_add);
     }
     count
 }
 
-fn count_leading_zeroes(input: &DExpr, ctx: &BoolectorSolverContext, word_size: u32) -> DExpr {
+fn count_leading_zeroes<C: Composition>(
+    input: &C::SmtExpression,
+    ctx: &GAState2<C>,
+    word_size: usize,
+) -> C::SmtExpression {
     let input = input.not();
-    let mut count = ctx.from_u64(0, word_size);
-    let mut stop_count_mask = ctx.from_u64(1, word_size);
-    let mask = ctx.from_u64(1, word_size);
+    let mut count = ctx.memory.from_u64(0, word_size);
+    let mut stop_count_mask = ctx.memory.from_u64(1, word_size);
+    let mask = ctx.memory.from_u64(1, word_size);
     for n in (0..word_size).rev() {
-        let symbolic_n = ctx.from_u64(n as u64, word_size);
-        let to_add = input.srl(&symbolic_n).and(&mask).and(&stop_count_mask);
+        let symbolic_n = ctx.memory.from_u64(n as u64, word_size);
+        let to_add = input
+            .shift(&symbolic_n, Shift::Lsr)
+            .and(&mask)
+            .and(&stop_count_mask);
         stop_count_mask = to_add.clone();
         count = count.add(&to_add);
     }
@@ -964,15 +1026,15 @@ fn count_leading_zeroes(input: &DExpr, ctx: &BoolectorSolverContext, word_size: 
 
 /// Does an add with carry and returns result, carry out and overflow like a
 /// hardware adder.
-fn add_with_carry(
-    op1: &DExpr,
-    op2: &DExpr,
-    carry_in: &DExpr,
-    word_size: u32,
-) -> AddWithCarryResult {
+fn add_with_carry<E: SmtExpr>(
+    op1: &E,
+    op2: &E,
+    carry_in: &E,
+    word_size: usize,
+) -> AddWithCarryResult<E> {
     let carry_in = carry_in.resize_unsigned(1);
-    let c1 = op2.uaddo(&carry_in.zero_ext(word_size));
-    let op2 = op2.add(&carry_in.zero_ext(word_size));
+    let c1 = op2.uaddo(&carry_in.zero_ext(word_size as u32));
+    let op2 = op2.add(&carry_in.zero_ext(word_size as u32));
     let result = op1.add(&op2);
     let carry = op1.uaddo(&op2).or(&c1);
     let overflow = op1.saddo(&op2);

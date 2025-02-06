@@ -1,9 +1,16 @@
 use std::fmt::Debug;
 
 use boolector::SolverResult;
-use general_assembly::shift::Shift;
+use general_assembly::{prelude::DataWord, shift::Shift};
 
-use crate::{memory::MemoryError as MemoryFileError, Endianness, GAError, WordSize};
+use crate::{
+    arch::Architecture,
+    memory::MemoryError as MemoryFileError,
+    project::Project,
+    Endianness,
+    GAError,
+    WordSize,
+};
 
 pub mod smt_boolector;
 
@@ -42,39 +49,89 @@ pub enum MemoryError {
     PcNonDetmerinistic,
 }
 
+pub trait ProgramMemory: Debug + Clone {
+    #[must_use]
+    /// Writes a data-word to program memory.
+    fn set(&self, address: u64, dataword: DataWord) -> Result<(), MemoryError>;
+    #[must_use]
+    /// Gets a data-word from program memory.
+    fn get(&self, address: u64, bits: u32) -> Result<DataWord, MemoryError>;
+    #[must_use]
+    /// Returns true if the address is contained in the program memory.
+    fn address_in_range(&self, address: u64) -> bool;
+
+    #[must_use]
+    /// Returns the endianness used in the program memory.
+    ///
+    /// This is assumed to reflect the underlying architecture endianness.
+    fn get_endianness(&self) -> Endianness;
+
+    #[must_use]
+    /// Returns the address of a specific symbol if it exists.
+    fn get_symbol_address(&self, symbol: &str) -> Option<u64>;
+
+    #[must_use]
+    /// Returns the pointer size of the system.
+    fn get_ptr_size(&self) -> usize;
+
+    #[must_use]
+    /// Returns the word size of the system.
+    fn get_word_size(&self) -> usize {
+        self.get_ptr_size()
+    }
+}
 pub trait SmtMap: Debug + Clone {
-    type Idx: Sized;
-    type ReturnValue: SmtExpr;
-    type SMT: SmtSolver;
-    #[must_use]
-    fn new(smt: Self::SMT, word_size: usize, endianness: Endianness) -> Result<Self, GAError>;
+    type Expression: SmtExpr;
+    type SMT: SmtSolver<Expression = Self::Expression>;
+    type ProgramMemory: ProgramMemory;
 
     #[must_use]
-    fn get(&self, idx: &Self::Idx, size: usize) -> Result<Self::ReturnValue, MemoryError>;
-    #[must_use]
-    fn set(&mut self, idx: &Self::Idx, value: Self::ReturnValue) -> Result<(), MemoryError>;
+    fn new(
+        smt: Self::SMT,
+        project: Self::ProgramMemory,
+        word_size: usize,
+        endianness: Endianness,
+    ) -> Result<Self, GAError>;
 
     #[must_use]
-    fn get_flag(&mut self, idx: &str) -> Result<Self::ReturnValue, MemoryError>;
+    fn get(&self, idx: &Self::Expression, size: usize) -> Result<Self::Expression, MemoryError>;
     #[must_use]
-    fn set_flag(&mut self, idx: &str, value: Self::ReturnValue) -> Result<(), MemoryError>;
+    fn set(&mut self, idx: &Self::Expression, value: Self::Expression) -> Result<(), MemoryError>;
 
     #[must_use]
-    fn get_register(&mut self, idx: &str) -> Result<Self::ReturnValue, MemoryError>;
+    fn get_flag(&mut self, idx: &str) -> Result<Self::Expression, MemoryError>;
     #[must_use]
-    fn set_register(&mut self, idx: &str, value: Self::ReturnValue) -> Result<(), MemoryError>;
+    fn set_flag(&mut self, idx: &str, value: Self::Expression) -> Result<(), MemoryError>;
+
+    #[must_use]
+    fn get_register(&mut self, idx: &str) -> Result<Self::Expression, MemoryError>;
+    #[must_use]
+    fn set_register(&mut self, idx: &str, value: Self::Expression) -> Result<(), MemoryError>;
 
     // NOTE: Might be a poor assumption that the word size for PC is 32 bit.
     #[must_use]
-    fn get_pc(&self) -> Result<Self::ReturnValue, MemoryError>;
+    fn get_pc(&self) -> Result<Self::Expression, MemoryError>;
     #[must_use]
     fn set_pc(&mut self, value: u32) -> Result<(), MemoryError>;
 
     #[must_use]
-    fn from_u64(&self, value: u64, size: usize) -> Self::ReturnValue;
+    fn from_u64(&self, value: u64, size: usize) -> Self::Expression;
 
     #[must_use]
-    fn from_bool(&self, value: bool) -> Self::ReturnValue;
+    fn from_bool(&self, value: bool) -> Self::Expression;
+
+    #[must_use]
+    fn unconstrained(&self, name: &str, size: usize) -> Self::Expression;
+
+    #[must_use]
+    /// Returns the pointer size of the system.
+    fn get_ptr_size(&self) -> usize;
+
+    #[must_use]
+    /// Returns the word size of the system.
+    fn get_word_size(&self) -> usize {
+        self.get_ptr_size()
+    }
 }
 
 /// Defines a type that can be used as an SMT solver.

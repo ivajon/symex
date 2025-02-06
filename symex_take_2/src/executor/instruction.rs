@@ -42,7 +42,7 @@ pub enum CycleCount2<C: Composition> {
     Value(usize),
 
     /// Cycle count depends on execution state
-    Function(fn(state: &GAState2<C>) -> usize),
+    Function(fn(state: &mut GAState2<C>) -> usize),
 }
 
 /// Represents a general assembly instruction.
