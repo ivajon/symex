@@ -13,20 +13,12 @@ use crate::{
 };
 
 /// Represents a generic state container.
-pub trait StateContainer: Clone + Debug {
-    type Architecture: Architecture;
+pub trait StateContainer: Debug {
+    type Architecture: Architecture + ?Sized;
 
     #[must_use]
     /// Returns the underlying architecture.
     fn as_arch(&mut self) -> &mut Self::Architecture;
-}
-
-impl<A: Architecture> StateContainer for A {
-    type Architecture = Self;
-
-    fn as_arch(&mut self) -> &mut Self::Architecture {
-        self
-    }
 }
 
 #[derive(Debug, Clone, Copy)]

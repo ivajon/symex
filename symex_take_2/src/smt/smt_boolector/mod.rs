@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, marker::PhantomData, rc::Rc};
+use std::{cmp::Ordering, rc::Rc};
 
 use boolector::{
     option::{BtorOption, ModelGen, NumberFormat},
@@ -16,20 +16,17 @@ use general_assembly::shift::Shift;
 pub(super) use solver::BoolectorIncrementalSolver;
 
 use super::{SmtExpr, SmtSolver, Solutions, SolverError};
-use crate::{
-    arch::Architecture,
-    memory::{array_memory::BoolectorMemory, ArrayMemory},
-};
+use crate::memory::array_memory::BoolectorMemory;
 
 #[derive(Clone, Debug)]
-pub struct Boolector<A: Architecture> {
+pub struct Boolector {
     pub ctx: Rc<Btor>,
-    memory: BoolectorMemory<A>,
+    memory: BoolectorMemory,
 }
 
-impl<A: Architecture> SmtSolver for Boolector<A> {
+impl SmtSolver for Boolector {
     type Expression = BoolectorExpr;
-    type Memory = BoolectorMemory<A>;
+    type Memory = BoolectorMemory;
 
     fn new() -> Self
     where
@@ -145,7 +142,7 @@ impl<A: Architecture> SmtSolver for Boolector<A> {
     }
 }
 
-impl<A: Architecture> Boolector<A> {
+impl Boolector {
     fn _check_sat_result(&self, sat_result: SolverResult) -> Result<bool, SolverError> {
         match sat_result {
             SolverResult::Sat => Ok(true),

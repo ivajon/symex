@@ -49,9 +49,9 @@ pub type Result<T> = std::result::Result<T, GAError>;
 pub trait Composition: Clone + Debug {
     /// The state container, this can be either only architecture specific data
     /// or it may include user provided data.
-    type StateContainer: StateContainer<Architecture = Self::Architecture>;
+    type StateContainer: StateContainer<Architecture = Self::Architecture> + Clone;
     type SMT: SmtSolver<Memory = Self::Memory, Expression = Self::SmtExpression>;
-    type Architecture: Architecture;
+    type Architecture: Architecture + ?Sized;
     type Logger: Logger;
 
     type SmtExpression: SmtExpr;

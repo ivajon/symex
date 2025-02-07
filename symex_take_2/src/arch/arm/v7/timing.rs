@@ -1,10 +1,6 @@
 use disarmv7::prelude::{Condition, Operation as V7Operation, Register};
 
-use super::ArmV7EM;
-use crate::{
-    executor::{instruction::CycleCount2, state::GAState2},
-    Composition,
-};
+use crate::executor::{instruction::CycleCount2, state::GAState2};
 // use general_assembly::operation::Operation;
 
 impl super::ArmV7EM {
@@ -170,7 +166,10 @@ impl super::ArmV7EM {
         }
     }
 
-    pub fn cycle_count_m4_core<C: Composition<Architecture = ArmV7EM>>(
+    pub fn cycle_count_m4_core<
+        ArchitechtureImplementation: AsMut<Self> + ?Sized,
+        C: crate::Composition<Architecture = ArchitechtureImplementation>,
+    >(
         instr: &V7Operation,
     ) -> CycleCount2<C> {
         let p = 3;

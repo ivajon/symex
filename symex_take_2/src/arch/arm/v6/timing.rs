@@ -6,10 +6,12 @@ use super::ArmV6M;
 use crate::{
     executor::{instruction::CycleCount2, state::GAState2},
     smt::{SmtExpr, SmtMap},
-    Composition,
 };
 
-pub(crate) fn cycle_count_m0plus_core<C: Composition<Architecture = ArmV6M>>(
+pub(crate) fn cycle_count_m0plus_core<
+    ArchitechtureImplementation: AsMut<ArmV6M> + ?Sized,
+    C: crate::Composition<Architecture = ArchitechtureImplementation>,
+>(
     operation: &Operation,
 ) -> CycleCount2<C> {
     // SIO based on the rp2040 make this configurable later
@@ -174,7 +176,10 @@ pub(crate) fn cycle_count_m0plus_core<C: Composition<Architecture = ArmV6M>>(
 }
 
 #[allow(dead_code)]
-pub(crate) fn cycle_count_m0_core<C: Composition<Architecture = ArmV6M>>(
+pub(crate) fn cycle_count_m0_core<
+    ArchitechtureImplementation: AsMut<ArmV6M>,
+    C: crate::Composition<Architecture = ArchitechtureImplementation>,
+>(
     operation: &Operation,
 ) -> CycleCount2<C> {
     match operation {

@@ -10,7 +10,7 @@ use super::{arm_isa, ArmIsa};
 use crate::{
     arch::{ArchError, Architecture, ParseError},
     executor::{
-        hooks::{HookContainer, PCHook2, StateContainer},
+        hooks::{HookContainer, PCHook2},
         instruction::Instruction2,
         state::GAState2,
     },
@@ -30,11 +30,16 @@ pub mod timing;
 pub struct ArmV7EM {}
 
 impl Architecture for ArmV7EM {
-    fn add_hooks<C: crate::Composition<Architecture = Self>>(
+    fn add_hooks<
+        ArchitechtureImplementation: AsMut<Self> + ?Sized,
+        C: crate::Composition<Architecture = ArchitechtureImplementation>,
+    >(
         &self,
         cfg: &mut HookContainer<C>,
         map: &mut SubProgramMap,
-    ) {
+    ) where
+        Self: Sized,
+    {
         let symbolic_sized = |state: &mut GAState2<C>| {
             let value_ptr = state.memory.get_register("R0")?;
             let size = state.memory.get_register("R1")?.get_constant().unwrap() * 8;
@@ -106,11 +111,17 @@ impl Architecture for ArmV7EM {
         cfg.add_memory_read_hook(0x4000c008, read_reset_done);
     }
 
-    fn translate<C: crate::Composition<Architecture = Self>>(
+    fn translate<
+        ArchitechtureImplementation: AsMut<Self> + ?Sized,
+        C: crate::Composition<Architecture = ArchitechtureImplementation>,
+    >(
         &self,
         buff: &[u8],
         state: &GAState2<C>,
-    ) -> Result<Instruction2<C>, ArchError> {
+    ) -> Result<Instruction2<C>, ArchError>
+    where
+        Self: Sized,
+    {
         let mut buff: disarmv7::buffer::PeekableBuffer<u8, _> = buff.iter().cloned().into();
 
         let instr = V7Operation::parse(&mut buff).map_err(|e| ArchError::ParsingError(e.into()))?;
@@ -126,21 +137,21 @@ impl Architecture for ArmV7EM {
         })
     }
 
-    fn discover(file: &File<'_>) -> Result<Option<Self>, ArchError> {
-        let f = match file {
-            File::Elf32(f) => Ok(f),
-            _ => Err(ArchError::IncorrectFileType),
-        }?;
-        let section = match f.section_by_name(".ARM.attributes") {
-            Some(section) => Ok(section),
-            None => Err(ArchError::MissingSection(".ARM.attributes")),
-        }?;
-        let isa = arm_isa(&section)?;
-        match isa {
-            ArmIsa::ArmV6M => Ok(None),
-            ArmIsa::ArmV7EM => Ok(Some(ArmV7EM::default())),
-        }
-    }
+    //fn discover(file: &File<'_>) -> Result<Option<Self>, ArchError> {
+    //    let f = match file {
+    //        File::Elf32(f) => Ok(f),
+    //        _ => Err(ArchError::IncorrectFileType),
+    //    }?;
+    //    let section = match f.section_by_name(".ARM.attributes") {
+    //        Some(section) => Ok(section),
+    //        None => Err(ArchError::MissingSection(".ARM.attributes")),
+    //    }?;
+    //    let isa = arm_isa(&section)?;
+    //    match isa {
+    //        ArmIsa::ArmV6M => Ok(None),
+    //        ArmIsa::ArmV7EM => Ok(Some(ArmV7EM::default())),
+    //    }
+    //}
 
     fn new() -> Self
     where

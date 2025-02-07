@@ -13,6 +13,7 @@ pub mod discover;
 use std::fmt::{Debug, Display};
 
 use arm::{v6::ArmV6M, v7::ArmV7EM};
+use dyn_clone::DynClone;
 use object::File;
 use thiserror::Error;
 
@@ -106,25 +107,34 @@ pub enum SupportedArchitecture {
 ///
 /// Denotes that the implementer can be treated as an architecture in this
 /// crate.
-pub trait Architecture: Debug + Display + Clone + Sized + 'static {
+pub trait Architecture: Debug + Display + DynClone {
     /// Converts a slice of bytes to an [`Instruction`]
-    fn translate<C: Composition<Architecture = Self>>(
+    fn translate<
+        ArchitechtureImplementation: AsMut<Self> + ?Sized,
+        C: Composition<Architecture = ArchitechtureImplementation>,
+    >(
         &self,
         buff: &[u8],
         state: &GAState2<C>,
-    ) -> Result<Instruction2<C>, ArchError>;
+    ) -> Result<Instruction2<C>, ArchError>
+    where
+        Self: Sized;
 
     /// Adds the architecture specific hooks to the [`RunConfig`]
-    fn add_hooks<C: Composition<Architecture = Self>>(
+    fn add_hooks<
+        ArchitechtureImplementation: AsMut<Self> + ?Sized,
+        C: Composition<Architecture = ArchitechtureImplementation>,
+    >(
         &self,
         cfg: &mut HookContainer<C>,
         sub_program_lookup: &mut SubProgramMap,
-    );
-    /// Returns an instance of self if the file is defined for this
-    /// specific architecture.
-    fn discover(file: &File<'_>) -> Result<Option<Self>, ArchError>;
+    )
+    where
+        Self: Sized;
 
     fn new() -> Self
     where
         Self: Sized;
 }
+
+dyn_clone::clone_trait_object!(Architecture);

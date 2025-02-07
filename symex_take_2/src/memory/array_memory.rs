@@ -155,26 +155,26 @@ impl ArrayMemory {
 }
 
 #[derive(Debug, Clone)]
-pub struct BoolectorMemory<A: Architecture> {
+pub struct BoolectorMemory {
     ram: ArrayMemory,
     register_file: HashMap<String, DExpr>,
     flags: HashMap<String, DExpr>,
     variables: HashMap<String, DExpr>,
     // TODO: Expose these.
     locals: HashMap<String, DExpr>,
-    program_memory: &'static Project<A>,
+    program_memory: &'static Project,
     word_size: usize,
     pc: u64,
 }
 
-impl<A: Architecture> SmtMap for BoolectorMemory<A> {
+impl SmtMap for BoolectorMemory {
     type Expression = DExpr;
-    type ProgramMemory = &'static Project<A>;
+    type ProgramMemory = &'static Project;
     type SMT = Boolector;
 
     fn new(
         smt: Self::SMT,
-        program_memory: &'static Project<A>,
+        program_memory: &'static Project,
         word_size: usize,
         endianness: Endianness,
     ) -> Result<Self, crate::GAError> {

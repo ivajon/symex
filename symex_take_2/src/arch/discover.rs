@@ -3,7 +3,6 @@ use object::{File, Object};
 use super::{
     arm::{v6::ArmV6M, v7::ArmV7EM},
     ArchError,
-    Architecture,
     SupportedArchitechture,
 };
 

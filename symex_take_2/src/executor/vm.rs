@@ -3,7 +3,6 @@
 use super::{hooks::HookContainer, state::GAState2, GAExecutor, PathResult};
 use crate::{
     path_selection::{DFSPathSelection, Path},
-    project::Project,
     smt::{SmtMap, SmtSolver},
     Composition,
     Result,
@@ -18,7 +17,7 @@ pub struct VM<C: Composition> {
 impl<C: Composition> VM<C> {
     pub fn new(
         project: <C::Memory as SmtMap>::ProgramMemory,
-        ctx: &'static C::SMT,
+        ctx: &C::SMT,
         fn_name: &str,
         end_pc: u64,
         state_container: C::StateContainer,
@@ -58,17 +57,17 @@ impl<C: Composition> VM<C> {
         vm
     }
 
-    pub fn run(&mut self) -> Result<Option<(PathResult<C>, GAState2<C>)>> {
+    pub fn run(&mut self) -> Result<Option<(PathResult<C>, GAState2<C>, Vec<C::SmtExpression>)>> {
         if let Some(path) = self.paths.get_path() {
             // try stuff
             let mut executor = GAExecutor::from_state(path.state, self, self.project.clone());
 
-            for constraint in path.constraints {
+            for constraint in path.constraints.clone() {
                 executor.state.constraints.assert(&constraint);
             }
 
             let result = executor.resume_execution()?;
-            return Ok(Some((result, executor.state)));
+            return Ok(Some((result, executor.state, path.constraints)));
         }
         Ok(None)
     }

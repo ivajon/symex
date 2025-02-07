@@ -3,14 +3,7 @@ use std::fmt::Debug;
 use boolector::SolverResult;
 use general_assembly::{prelude::DataWord, shift::Shift};
 
-use crate::{
-    arch::Architecture,
-    memory::MemoryError as MemoryFileError,
-    project::Project,
-    Endianness,
-    GAError,
-    WordSize,
-};
+use crate::{memory::MemoryError as MemoryFileError, Endianness, GAError};
 
 pub mod smt_boolector;
 
@@ -137,7 +130,7 @@ pub trait SmtMap: Debug + Clone {
 /// Defines a type that can be used as an SMT solver.
 pub trait SmtSolver: Debug + Clone {
     type Expression: SmtExpr;
-    type Memory: SmtMap<ReturnValue = Self::Expression, Idx = Self::Expression, SMT = Self>;
+    type Memory: SmtMap<SMT = Self, Expression = Self::Expression>;
 
     #[must_use]
     /// Borrows the underlying memory.

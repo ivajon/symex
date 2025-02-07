@@ -35,4 +35,5 @@ hashbrown = "0.15.2"
 kd-tree = "0.6.0"
 fst = "0.4.7"
 regex-automata = { version = "0.1.9", features = ["transducer"] }
+dyn-clone = "1.0.18"
 

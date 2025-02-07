@@ -1,33 +1,26 @@
 #![allow(dead_code, missing_docs)]
-use std::{
-    fmt::Display,
-    marker::PhantomData,
-    path::{Path, PathBuf},
-};
+use std::{fmt::Display, path::PathBuf};
 
 use gimli::{DebugAbbrev, DebugInfo, DebugStr};
 use hashbrown::HashMap;
-use object::{File, Object, ObjectSection, ObjectSymbol};
-use tracing::{debug, trace};
+use object::{Object, ObjectSection, ObjectSymbol};
+use tracing::debug;
 
 use crate::{
-    arch::Architecture,
+    arch::{Architecture, SupportedArchitechture},
     executor::hooks::HookContainer,
-    project::{dwarf_helper::SubProgramMap, segments::Segments, ProjectError},
-    smt::SmtSolver,
+    manager::SymexArbiter,
+    project::{dwarf_helper::SubProgramMap, Project, ProjectError},
+    smt::{SmtMap, SmtSolver},
     Composition,
     Endianness,
-    WordSize,
 };
 
 pub mod run_config;
 
 mod sealed {
-    use crate::{arch::Architecture, smt::SmtSolver};
 
-    pub trait ArchOverride: Architecture {
-        fn override_architecture() -> Self;
-    }
+    pub trait ArchOverride {}
     pub trait SmtSolverConfigured {}
     pub trait BinaryLoadingDone {}
 }
@@ -61,7 +54,7 @@ pub struct SymexConstructor<
 }
 
 impl<'str> SymexConstructor<'str, NoArchOverride, SmtNotConfigured, BinaryNotLoaded> {
-    fn new(path: &'str str) -> Self {
+    const fn new(path: &'str str) -> Self {
         Self {
             file: path,
             override_arch: NoArchOverride,
@@ -74,10 +67,10 @@ impl<'str> SymexConstructor<'str, NoArchOverride, SmtNotConfigured, BinaryNotLoa
 impl<'str, S: SmtSolverConfigured, B: BinaryLoadingDone>
     SymexConstructor<'str, NoArchOverride, S, B>
 {
-    pub fn override_architecture<A: ArchOverride>(self) -> SymexConstructor<'str, A, S, B> {
-        SymexConstructor::<'str, A, S, B> {
+    pub fn override_architecture<A: Architecture>(self) -> SymexConstructor<'str, Box<A>, S, B> {
+        SymexConstructor::<'str, Box<A>, S, B> {
             file: self.file,
-            override_arch: A::override_architecture(),
+            override_arch: Box::new(A::new()),
             smt: self.smt,
             binary_file: self.binary_file,
         }
@@ -123,30 +116,47 @@ impl<'str, 'file, A: ArchOverride, S: SmtSolverConfigured>
     }
 }
 
-impl<'str, 'file, A: Architecture, S: SmtSolver>
-    SymexConstructor<'str, A, SmtConfigured<S>, BinaryLoaded<'file>>
+impl<'str, 'file, S: SmtSolverConfigured>
+    SymexConstructor<'str, NoArchOverride, S, BinaryLoaded<'file>>
 {
-    fn compose<C: Composition>(
+    pub fn discover(
         self,
-        user_state: C::StateContainer,
+    ) -> crate::Result<SymexConstructor<'str, Box<dyn Architecture>, S, BinaryLoaded<'file>>> {
+        let arch = SupportedArchitechture::discover(&self.binary_file.object)?;
+        let arch = match arch {
+            SupportedArchitechture::ArmV6M(a) => Box::new(a) as Box<dyn Architecture>,
+            SupportedArchitechture::ArmV7EM(a) => Box::new(a),
+        };
+
+        Ok(SymexConstructor {
+            file: self.file,
+            override_arch: arch,
+            smt: self.smt,
+            binary_file: self.binary_file,
+        })
+    }
+}
+
+impl<'str, 'file, A: Architecture + ?Sized, S: SmtSolver>
+    SymexConstructor<'str, Box<A>, SmtConfigured<S>, BinaryLoaded<'file>>
+{
+    pub fn compose<C: Composition, StateCreator: FnOnce(Box<A>) -> C::StateContainer>(
+        self,
+        user_state_composer: StateCreator,
         logger: C::Logger,
-    ) -> crate::Result<todo!()> {
+    ) -> crate::Result<SymexArbiter<C>>
+    where
+        C::Memory: SmtMap<ProgramMemory = &'static Project>,
+        C: Composition<SMT = S>,
+        C: Composition<StateContainer = Box<A>>,
+    {
         let binary = self.binary_file.object;
         let smt = self.smt.smt;
-        let a = self.override_arch;
 
-        let segments = Segments::from_file(&binary);
         let endianness = if binary.is_little_endian() {
             Endianness::Little
         } else {
             Endianness::Big
-        };
-
-        // Do not catch 16 or 8 bit architectures but will do for now.
-        let word_size = if binary.is_64() {
-            WordSize::Bit64
-        } else {
-            WordSize::Bit32
         };
 
         let mut symtab = HashMap::new();
@@ -177,53 +187,37 @@ impl<'str, 'file, A: Architecture, S: SmtSolver>
         let map = SubProgramMap::new(&debug_info, &debug_abbrev, &debug_str);
         let hooks = HookContainer::default(&map)?;
 
-        todo!()
-    }
-}
+        let project = Box::new(Project::from_binary(binary, symtab)?);
+        let project = Box::leak(project);
 
-pub struct SymexArbiter<C: Composition> {
-    logger: C::Logger,
+        Ok(SymexArbiter::<C>::new(
+            logger,
+            project,
+            smt,
+            user_state_composer(self.override_arch),
+            hooks,
+        ))
+    }
 }
 
 impl Display for NoArchOverride {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        //let cstr: SymexArbiter<crate::defaults::DynamicBoolectorBacked> =
+        //    SymexConstructor::new("asd")
+        //        .load_binary()
+        //        .unwrap()
+        //        .discover()
+        //        .unwrap()
+        //        //.override_architecture::<ArmV7EM>()
+        //        .configure_smt()
+        //        .compose(|a| a, NoLogger)
+        //        .unwrap();
         write!(f, "Not overriding architecture")
     }
 }
 
-impl<A: Architecture> ArchOverride for A {
-    fn override_architecture() -> Self {
-        Self::new()
-    }
-}
-impl Architecture for NoArchOverride {
-    fn translate<C: Composition<Architecture = Self>>(
-        &self,
-        _buff: &[u8],
-        _state: &crate::executor::state::GAState2<C>,
-    ) -> Result<crate::executor::instruction::Instruction2<C>, crate::arch::ArchError> {
-        unimplemented!("NoArchOverride is not an architecture");
-    }
-
-    fn add_hooks<C: Composition<Architecture = Self>>(
-        &self,
-        _cfg: &mut crate::executor::hooks::HookContainer<C>,
-        _sub_program_lookup: &mut crate::project::dwarf_helper::SubProgramMap,
-    ) {
-        unimplemented!("NoArchOverride is not an architecture");
-    }
-
-    fn discover(_file: &File<'_>) -> Result<Option<Self>, crate::arch::ArchError> {
-        unimplemented!("NoArchOverride is not an architecture");
-    }
-
-    fn new() -> Self
-    where
-        Self: Sized,
-    {
-        Self
-    }
-}
+impl<A: Architecture + ?Sized> ArchOverride for Box<A> {}
+impl ArchOverride for NoArchOverride {}
 
 impl SmtSolverConfigured for SmtNotConfigured {}
 
