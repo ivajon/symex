@@ -10,7 +10,11 @@ pub mod arm;
 /// Defines discovery behaviour for the architectures.
 pub mod discover;
 
-use std::fmt::{Debug, Display};
+use std::{
+    fmt::{Debug, Display},
+    pin::Pin,
+    rc::Rc,
+};
 
 use arm::{v6::ArmV6M, v7::ArmV7EM};
 use dyn_clone::DynClone;
@@ -109,32 +113,19 @@ pub enum SupportedArchitecture {
 /// crate.
 pub trait Architecture: Debug + Display + DynClone {
     /// Converts a slice of bytes to an [`Instruction`]
-    fn translate<
-        ArchitechtureImplementation: AsMut<Self> + ?Sized,
-        C: Composition<Architecture = ArchitechtureImplementation>,
-    >(
+    fn translate<C: Composition<Architecture = Self>>(
         &self,
         buff: &[u8],
         state: &GAState2<C>,
-    ) -> Result<Instruction2<C>, ArchError>
-    where
-        Self: Sized;
+    ) -> Result<Instruction2<C>, ArchError>;
 
     /// Adds the architecture specific hooks to the [`RunConfig`]
-    fn add_hooks<
-        ArchitechtureImplementation: AsMut<Self> + ?Sized,
-        C: Composition<Architecture = ArchitechtureImplementation>,
-    >(
-        &self,
-        cfg: &mut HookContainer<C>,
-        sub_program_lookup: &mut SubProgramMap,
-    )
-    where
-        Self: Sized;
+    fn add_hooks(&self, sub_program_lookup: &mut SubProgramMap);
 
+    /// Creates a new instance of the architecture
     fn new() -> Self
     where
         Self: Sized;
 }
 
-dyn_clone::clone_trait_object!(Architecture);
+dyn_clone::clone_trait_object!(Architecture<Composition = dyn Composition>);

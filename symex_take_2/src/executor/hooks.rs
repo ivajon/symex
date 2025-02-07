@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Represents a generic state container.
-pub trait StateContainer: Debug {
+pub trait StateContainer: Debug + Clone {
     type Architecture: Architecture + ?Sized;
 
     #[must_use]

@@ -1,9 +1,15 @@
 use std::fmt::Debug;
 
 use boolector::SolverResult;
-use general_assembly::{prelude::DataWord, shift::Shift};
+use general_assembly::{operand::RawDataWord, prelude::DataWord, shift::Shift};
 
-use crate::{memory::MemoryError as MemoryFileError, Endianness, GAError};
+use crate::{
+    executor::instruction::Instruction2,
+    memory::MemoryError as MemoryFileError,
+    Composition,
+    Endianness,
+    GAError,
+};
 
 pub mod smt_boolector;
 
@@ -46,9 +52,16 @@ pub trait ProgramMemory: Debug + Clone {
     #[must_use]
     /// Writes a data-word to program memory.
     fn set(&self, address: u64, dataword: DataWord) -> Result<(), MemoryError>;
+
     #[must_use]
     /// Gets a data-word from program memory.
     fn get(&self, address: u64, bits: u32) -> Result<DataWord, MemoryError>;
+
+    #[must_use]
+    /// Gets a word from program memory without converting it to a rust
+    /// number.
+    fn get_raw_word(&self, address: u64) -> Result<&[u8], MemoryError>;
+
     #[must_use]
     /// Returns true if the address is contained in the program memory.
     fn address_in_range(&self, address: u64) -> bool;
@@ -88,22 +101,30 @@ pub trait SmtMap: Debug + Clone {
 
     #[must_use]
     fn get(&self, idx: &Self::Expression, size: usize) -> Result<Self::Expression, MemoryError>;
+
+    #[must_use]
+    fn get_word(&self, idx: &Self::Expression) -> Result<Self::Expression, MemoryError> {
+        self.get(idx, self.get_word_size() as usize)
+    }
     #[must_use]
     fn set(&mut self, idx: &Self::Expression, value: Self::Expression) -> Result<(), MemoryError>;
 
     #[must_use]
     fn get_flag(&mut self, idx: &str) -> Result<Self::Expression, MemoryError>;
+
     #[must_use]
     fn set_flag(&mut self, idx: &str, value: Self::Expression) -> Result<(), MemoryError>;
 
     #[must_use]
     fn get_register(&mut self, idx: &str) -> Result<Self::Expression, MemoryError>;
+
     #[must_use]
     fn set_register(&mut self, idx: &str, value: Self::Expression) -> Result<(), MemoryError>;
 
     // NOTE: Might be a poor assumption that the word size for PC is 32 bit.
     #[must_use]
     fn get_pc(&self) -> Result<Self::Expression, MemoryError>;
+
     #[must_use]
     fn set_pc(&mut self, value: u32) -> Result<(), MemoryError>;
 
@@ -125,6 +146,9 @@ pub trait SmtMap: Debug + Clone {
     fn get_word_size(&self) -> usize {
         self.get_ptr_size()
     }
+
+    #[must_use]
+    fn get_from_instruction_memory(&self, address: u64) -> crate::Result<&[u8]>;
 }
 
 /// Defines a type that can be used as an SMT solver.

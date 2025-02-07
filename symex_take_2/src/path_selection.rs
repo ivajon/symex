@@ -1,9 +1,4 @@
-use crate::{
-    arch::Architecture,
-    executor::state::{GAState, GAState2},
-    smt::{DExpr, SmtSolver},
-    Composition,
-};
+use crate::{executor::state::GAState2, smt::SmtSolver, Composition};
 
 #[derive(Debug, Clone)]
 pub struct Path<C: Composition> {

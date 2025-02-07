@@ -40,7 +40,7 @@ pub mod manager;
 pub mod memory;
 pub mod path_selection;
 pub mod project;
-pub mod run_elf;
+//pub mod run_elf;
 pub mod smt;
 
 pub type Result<T> = std::result::Result<T, GAError>;
@@ -51,7 +51,7 @@ pub trait Composition: Clone + Debug {
     /// or it may include user provided data.
     type StateContainer: StateContainer<Architecture = Self::Architecture> + Clone;
     type SMT: SmtSolver<Memory = Self::Memory, Expression = Self::SmtExpression>;
-    type Architecture: Architecture + ?Sized;
+    type Architecture: Architecture + AsMut<Self::Architecture> + ?Sized;
     type Logger: Logger;
 
     type SmtExpression: SmtExpr;

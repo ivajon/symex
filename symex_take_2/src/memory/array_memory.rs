@@ -10,17 +10,16 @@
 //! to other memory models, and in general this memory model is slower compared
 //! to e.g. object memory. However, it may provide better performance in certain
 //! situations.
-use general_assembly::prelude::DataWord;
+use general_assembly::{operand::RawDataWord, prelude::DataWord};
 use hashbrown::HashMap;
 use tracing::trace;
 
 use super::{MemoryError, BITS_IN_BYTE};
 use crate::{
-    arch::Architecture,
-    project::{self, Project},
+    executor::state::GAState2,
+    project::Project,
     smt::{smt_boolector::Boolector, DArray, DContext, DExpr, ProgramMemory, SmtMap},
     Endianness,
-    WordSize,
 };
 
 #[derive(Debug, Clone)]
@@ -235,6 +234,15 @@ impl SmtMap for BoolectorMemory {
         idx: &Self::Expression,
         value: Self::Expression,
     ) -> Result<(), crate::smt::MemoryError> {
+        if let Some(address) = idx.get_constant() {
+            if !self.program_memory.address_in_range(address) {
+                if let Some(_value) = value.get_constant() {
+                    todo!("Handle static program memory writes");
+                    //return Ok(self.program_memory.set(address, value)?);
+                }
+                todo!("Handle non static program memory writes");
+            }
+        }
         Ok(self.ram.write(idx, value)?)
     }
 
@@ -300,6 +308,10 @@ impl SmtMap for BoolectorMemory {
 
     fn get_ptr_size(&self) -> usize {
         self.program_memory.get_ptr_size() as usize
+    }
+
+    fn get_from_instruction_memory(&self, address: u64) -> crate::Result<&[u8]> {
+        self.program_memory.get_raw_word(address)
     }
 }
 

@@ -154,45 +154,10 @@ impl Project {
             WordSize::Bit8 => return Err(ProjectError::UnabvalableOperation),
         })
     }
-
-    pub fn get_raw_word(&self, address: u64) -> Result<RawDataWord> {
-        Ok(match self.word_size {
-            WordSize::Bit64 => match self.segments.read_raw_bytes(address, 8) {
-                Some(v) => {
-                    let mut data = [0; 8];
-                    data.copy_from_slice(v);
-                    RawDataWord::Word64(data)
-                }
-                None => {
-                    return Err(MemoryError::OutOfBounds.into());
-                }
-            },
-            WordSize::Bit32 => match self.segments.read_raw_bytes(address, 4) {
-                Some(v) => {
-                    let mut data = [0; 4];
-                    data.copy_from_slice(v);
-                    RawDataWord::Word32(data)
-                }
-                None => {
-                    return Err(MemoryError::OutOfBounds.into());
-                }
-            },
-            WordSize::Bit16 => match self.segments.read_raw_bytes(address, 2) {
-                Some(v) => {
-                    let mut data = [0; 2];
-                    data.copy_from_slice(v);
-                    RawDataWord::Word16(data)
-                }
-                None => {
-                    return Err(MemoryError::OutOfBounds.into());
-                }
-            },
-            WordSize::Bit8 => RawDataWord::Word8([self.get_byte(address)?]),
-        })
-    }
 }
+
 impl ProgramMemory for &'static Project {
-    fn get_word_size(&self) -> u32 {
+    fn get_word_size(&self) -> usize {
         // This is an oversimplification and not true for some architectures
         // But will do and should map to the addresses in the elf
         match self.word_size {
@@ -246,6 +211,35 @@ impl ProgramMemory for &'static Project {
 
     fn address_in_range(&self, address: u64) -> bool {
         self.segments.read_raw_bytes(address, 1).is_some()
+    }
+
+    fn get_raw_word(&self, address: u64) -> std::result::Result<&[u8], crate::smt::MemoryError> {
+        Ok(match self.word_size {
+            WordSize::Bit64 => match self.segments.read_raw_bytes(address, 8) {
+                Some(v) => v,
+                None => {
+                    return Err(MemoryError::OutOfBounds.into());
+                }
+            },
+            WordSize::Bit32 => match self.segments.read_raw_bytes(address, 4) {
+                Some(v) => v,
+                None => {
+                    return Err(MemoryError::OutOfBounds.into());
+                }
+            },
+            WordSize::Bit16 => match self.segments.read_raw_bytes(address, 2) {
+                Some(v) => v,
+                None => {
+                    return Err(MemoryError::OutOfBounds.into());
+                }
+            },
+            WordSize::Bit8 => match self.segments.read_raw_bytes(address, 1) {
+                Some(v) => v,
+                None => {
+                    return Err(MemoryError::OutOfBounds.into());
+                }
+            },
+        })
     }
 }
 

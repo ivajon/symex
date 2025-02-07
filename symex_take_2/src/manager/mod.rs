@@ -1,6 +1,7 @@
 use crate::{
     executor::{hooks::HookContainer, vm::VM, PathResult},
     logging::{Logger, Region},
+    project::dwarf_helper::SubProgramMap,
     smt::SmtMap,
     Composition,
 };
@@ -11,6 +12,7 @@ pub struct SymexArbiter<C: Composition> {
     ctx: C::SMT,
     state_container: C::StateContainer,
     hooks: HookContainer<C>,
+    symbol_lookup: SubProgramMap,
 }
 
 impl<C: Composition> SymexArbiter<C> {
@@ -20,6 +22,7 @@ impl<C: Composition> SymexArbiter<C> {
         ctx: C::SMT,
         state_container: C::StateContainer,
         hooks: HookContainer<C>,
+        symbol_lookup: SubProgramMap,
     ) -> Self {
         Self {
             logger,
@@ -27,11 +30,24 @@ impl<C: Composition> SymexArbiter<C> {
             ctx,
             state_container,
             hooks,
+            symbol_lookup,
         }
     }
 }
 
 impl<C: Composition> SymexArbiter<C> {
+    pub fn add_hooks<F: FnMut(&mut HookContainer<C>, &SubProgramMap)>(
+        &mut self,
+        mut f: F,
+    ) -> &mut Self {
+        f(&mut self.hooks, &self.symbol_lookup);
+        self
+    }
+
+    pub fn get_symbol_map(&self) -> &SubProgramMap {
+        &self.symbol_lookup
+    }
+
     pub fn run(&mut self, function: &str) -> crate::Result<&C::Logger> {
         let mut vm = VM::new(
             self.project.clone(),
@@ -75,3 +91,22 @@ impl<C: Composition> SymexArbiter<C> {
         self.logger
     }
 }
+
+//pub struct Runner<'strings, 'ret, C: Composition, I: Iterator<Item =
+// &'strings str>> {    arbiter: SymexArbiter<C>,
+//    functions: I,
+//    ret: PhantomData<&'ret ()>,
+//}
+//
+//impl<'strings, 'ret, C: Composition, I: Iterator<Item = &'strings str>>
+// Iterator    for Runner<'strings, 'ret, C, I>
+//where
+//    <C as Composition>::Logger: 'ret + 'strings,
+//{
+//    type Item = crate::Result<&'ret C::Logger>;
+//
+//    fn next(&'strings mut self) -> Option<Self::Item> {
+//        let func = self.functions.next()?;
+//        Some(self.arbiter.run(func))
+//    }
+//}

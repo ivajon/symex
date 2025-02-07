@@ -8,7 +8,9 @@ use tracing::debug;
 
 use crate::{
     arch::{Architecture, SupportedArchitechture},
-    executor::hooks::HookContainer,
+    defaults::boolector::UserStateDynamicArch,
+    executor::hooks::{HookContainer, PCHook2, StateContainer},
+    logging::NoLogger,
     manager::SymexArbiter,
     project::{dwarf_helper::SubProgramMap, Project, ProjectError},
     smt::{SmtMap, SmtSolver},
@@ -148,7 +150,7 @@ impl<'str, 'file, A: Architecture + ?Sized, S: SmtSolver>
     where
         C::Memory: SmtMap<ProgramMemory = &'static Project>,
         C: Composition<SMT = S>,
-        C: Composition<StateContainer = Box<A>>,
+        //C: Composition<StateContainer = Box<A>>,
     {
         let binary = self.binary_file.object;
         let smt = self.smt.smt;
@@ -196,22 +198,80 @@ impl<'str, 'file, A: Architecture + ?Sized, S: SmtSolver>
             smt,
             user_state_composer(self.override_arch),
             hooks,
+            map,
         ))
     }
 }
 
 impl Display for NoArchOverride {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        //let cstr: SymexArbiter<crate::defaults::DynamicBoolectorBacked> =
-        //    SymexConstructor::new("asd")
-        //        .load_binary()
-        //        .unwrap()
-        //        .discover()
-        //        .unwrap()
-        //        //.override_architecture::<ArmV7EM>()
-        //        .configure_smt()
-        //        .compose(|a| a, NoLogger)
-        //        .unwrap();
+        #[derive(Debug)]
+        struct SomeUserState<A: Architecture + ?Sized> {
+            sp_writes: Vec<u64>,
+            a: Box<A>,
+        }
+
+        impl<A: Architecture + ?Sized> Clone for SomeUserState<A>
+        where
+            Box<A>: Clone,
+        {
+            fn clone(&self) -> Self {
+                Self {
+                    sp_writes: self.sp_writes.clone(),
+                    a: self.a.clone(),
+                }
+            }
+        }
+
+        impl<A: Architecture + ?Sized> StateContainer for SomeUserState<A>
+        where
+            Box<A>: Clone,
+        {
+            type Architecture = A;
+
+            fn as_arch(&mut self) -> &mut Self::Architecture {
+                &mut self.a
+            }
+        }
+
+        impl<A: Architecture + ?Sized> SomeUserState<A> {
+            fn new(a: Box<A>) -> Self {
+                Self {
+                    sp_writes: Vec::new(),
+                    a,
+                }
+            }
+        }
+
+        let mut symex: SymexArbiter<UserStateDynamicArch<SomeUserState<_>>> =
+            SymexConstructor::new("asd")
+                .load_binary()
+                .unwrap()
+                .discover()
+                .unwrap()
+                //.override_architecture::<crate::arch::arm::v7::ArmV7EM>()
+                .configure_smt()
+                .compose(|a| SomeUserState::new(a), NoLogger)
+                .unwrap();
+
+        let _res = symex.add_hooks(|hook_container, lookup| {
+            hook_container.add_pc_hook(0x1234, PCHook2::Continue);
+            hook_container.add_pc_hook_regex(
+                lookup,
+                r"some_function",
+                PCHook2::Intrinsic(|_state| Ok(())),
+            );
+
+            // Get the stack pointer writes.
+            hook_container.add_register_write_hook("SP".to_string(), |state, value| {
+                let value_const = value.get_constant().unwrap();
+                state.state.sp_writes.push(value_const);
+                state.memory.set_register("SP", value)?;
+                Ok(())
+            });
+        });
+        let _path_result = symex.run("Some_function");
+
         write!(f, "Not overriding architecture")
     }
 }
