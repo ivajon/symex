@@ -2,15 +2,15 @@
 
 use std::collections::{HashMap, VecDeque};
 
-use general_assembly::prelude::{Condition, DataWord};
+use general_assembly::prelude::Condition;
 use tracing::{debug, trace};
 
 use super::{
-    hooks::{HookContainer, PCHook2, Reader, ResultOrHook, StateContainer, Writer},
+    hooks::{HookContainer, PCHook2, Reader, ResultOrHook, Writer},
     instruction::Instruction2,
 };
 use crate::{
-    arch::Architecture,
+    arch::{SupportedArchitecture, TryAsMut},
     project::{self, ProjectError},
     smt::{ProgramMemory, SmtExpr, SmtMap, SmtSolver},
     Composition,
@@ -44,6 +44,7 @@ pub struct GAState2<C: Composition> {
     pub continue_in_instruction: Option<ContinueInsideInstruction2<C>>,
     pub current_instruction: Option<Instruction2<C>>,
     pub any_counter: u64,
+    pub architecture: SupportedArchitecture,
     instruction_counter: usize,
     has_jumped: bool,
     instruction_conditions: VecDeque<Condition>,
@@ -59,6 +60,7 @@ impl<C: Composition> GAState2<C> {
         function: &str,
         end_address: u64,
         state: C::StateContainer,
+        architecture: SupportedArchitecture,
     ) -> std::result::Result<Self, GAError> {
         let pc_reg = match project.get_symbol_address(function) {
             Some(a) => a,
@@ -76,17 +78,17 @@ impl<C: Composition> GAState2<C> {
         debug!("Found stack start at addr: {:#X}.", sp_reg);
 
         let endianness = project.get_endianness();
-        let memory = C::Memory::new(ctx.clone(), project.clone(), ptr_size as usize, endianness)?;
-        let mut registers = HashMap::new();
+        let mut memory =
+            C::Memory::new(ctx.clone(), project.clone(), ptr_size as usize, endianness)?;
         let pc_expr = ctx.from_u64(pc_reg, ptr_size as u32);
-        registers.insert("PC".to_owned(), pc_expr);
+        memory.set_register("PC", pc_expr)?;
 
         let sp_expr = ctx.from_u64(sp_reg, ptr_size as u32);
-        registers.insert("SP".to_owned(), sp_expr);
+        memory.set_register("SP", sp_expr)?;
 
         // Set the link register to max value to detect when returning from a function.
         let end_pc_expr = ctx.from_u64(end_address, ptr_size as u32);
-        registers.insert("LR".to_owned(), end_pc_expr);
+        memory.set_register("LR", end_pc_expr)?;
 
         let mut flags = HashMap::new();
         flags.insert("N".to_owned(), ctx.unconstrained(1, "flags.N"));
@@ -110,6 +112,7 @@ impl<C: Composition> GAState2<C> {
             has_jumped: false,
             instruction_conditions: VecDeque::new(),
             any_counter: 0,
+            architecture,
         })
     }
 
@@ -353,18 +356,11 @@ impl<C: Composition> GAState2<C> {
             ResultOrHook::Hook(hook) => Ok(HookOrInstruction2::PcHook(hook)),
             ResultOrHook::Hooks(_) => todo!("Handle multiple hooks on a single address"),
             ResultOrHook::Result(pc) => Ok(HookOrInstruction2::Instruction(
-                self.project.get_instruction2(pc as u64, self)?,
+                self.instruction_from_array_ptr(
+                    self.memory.get_from_instruction_memory(pc as u64)?,
+                )?,
             )),
         }
-    }
-
-    fn read_word_from_memory_no_static(
-        &self,
-        address: &C::SmtExpression,
-    ) -> Result<C::SmtExpression> {
-        Ok(self
-            .memory
-            .get(address, self.project.get_word_size() as usize)?)
     }
 
     fn write_word_from_memory_no_static(
@@ -401,8 +397,7 @@ impl<C: Composition> GAState2<C> {
     }
 
     pub fn instruction_from_array_ptr(&self, data: &[u8]) -> project::Result<Instruction2<C>> {
-        self.state
-            .as_arch()
+        self.architecture
             .translate(data, self)
             .map_err(|el| el.into())
     }
@@ -413,5 +408,16 @@ impl<C: Composition> GAState2<C> {
 
     pub fn writer<'a>(&'a mut self) -> Writer<'a, C> {
         self.hooks.writer(&mut self.memory)
+    }
+
+    /// Tries to convert the contained architecture to the target type.
+    ///
+    /// If the type is incorrect it returns
+    /// [GAError::InvalidArchitectureRequested]
+    pub fn try_as_architecture<T>(&mut self) -> crate::Result<&mut T>
+    where
+        SupportedArchitecture: TryAsMut<T>,
+    {
+        self.architecture.try_mut()
     }
 }

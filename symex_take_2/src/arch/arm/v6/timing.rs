@@ -2,16 +2,12 @@
 
 use armv6_m_instruction_parser::{instructons::Operation, registers::Register};
 
-use super::ArmV6M;
 use crate::{
     executor::{instruction::CycleCount2, state::GAState2},
     smt::{SmtExpr, SmtMap},
 };
 
-pub(crate) fn cycle_count_m0plus_core<
-    ArchitechtureImplementation: AsMut<ArmV6M> + ?Sized,
-    C: crate::Composition<Architecture = ArchitechtureImplementation>,
->(
+pub(crate) fn cycle_count_m0plus_core<C: crate::Composition>(
     operation: &Operation,
 ) -> CycleCount2<C> {
     // SIO based on the rp2040 make this configurable later
@@ -176,12 +172,7 @@ pub(crate) fn cycle_count_m0plus_core<
 }
 
 #[allow(dead_code)]
-pub(crate) fn cycle_count_m0_core<
-    ArchitechtureImplementation: AsMut<ArmV6M>,
-    C: crate::Composition<Architecture = ArchitechtureImplementation>,
->(
-    operation: &Operation,
-) -> CycleCount2<C> {
+pub(crate) fn cycle_count_m0_core<C: crate::Composition>(operation: &Operation) -> CycleCount2<C> {
     match operation {
         Operation::ADCReg { m: _, n: _, d: _ } => CycleCount2::Value(1),
         Operation::ADDImm { imm: _, n: _, d: _ } => CycleCount2::Value(1),

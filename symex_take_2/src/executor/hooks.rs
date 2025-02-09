@@ -1,11 +1,10 @@
 use std::fmt::Debug;
 
 use hashbrown::HashMap;
-use tracing::trace;
+use tracing::{trace, warn};
 
 use super::state::GAState2;
 use crate::{
-    arch::Architecture,
     project::dwarf_helper::SubProgramMap,
     smt::{MemoryError, SmtExpr, SmtMap, SmtSolver},
     Composition,
@@ -13,13 +12,8 @@ use crate::{
 };
 
 /// Represents a generic state container.
-pub trait StateContainer: Debug + Clone {
-    type Architecture: Architecture + ?Sized;
-
-    #[must_use]
-    /// Returns the underlying architecture.
-    fn as_arch(&mut self) -> &mut Self::Architecture;
-}
+pub trait UserStateContainer: Debug + Clone {}
+impl UserStateContainer for () {}
 
 #[derive(Debug, Clone, Copy)]
 pub enum PCHook2<C: Composition> {
@@ -60,20 +54,26 @@ pub struct HookContainer<C: Composition> {
     )>,
 }
 
-type RegisterReadHook<C: Composition> =
-    fn(state: &mut GAState2<C>) -> super::Result<C::SmtExpression>;
-type RegisterWriteHook<C: Composition> =
-    fn(state: &mut GAState2<C>, value: C::SmtExpression) -> super::Result<()>;
+pub type RegisterReadHook<C> =
+    fn(state: &mut GAState2<C>) -> super::Result<<C as Composition>::SmtExpression>;
+pub type RegisterWriteHook<C> =
+    fn(state: &mut GAState2<C>, value: <C as Composition>::SmtExpression) -> super::Result<()>;
 
-type MemoryReadHook<C: Composition> =
-    fn(state: &mut GAState2<C>, address: u64) -> super::Result<C::SmtExpression>;
-type MemoryWriteHook<C: Composition> =
-    fn(state: &mut GAState2<C>, value: C::SmtExpression, address: u64) -> super::Result<()>;
+pub type MemoryReadHook<C> =
+    fn(state: &mut GAState2<C>, address: u64) -> super::Result<<C as Composition>::SmtExpression>;
+pub type MemoryWriteHook<C> = fn(
+    state: &mut GAState2<C>,
+    value: <C as Composition>::SmtExpression,
+    address: u64,
+) -> super::Result<()>;
 
-type MemoryRangeReadHook<C: Composition> =
-    fn(state: &mut GAState2<C>, address: u64) -> super::Result<C::SmtExpression>;
-type MemoryRangeWriteHook<C: Composition> =
-    fn(state: &mut GAState2<C>, value: C::SmtExpression, address: u64) -> super::Result<()>;
+pub type MemoryRangeReadHook<C> =
+    fn(state: &mut GAState2<C>, address: u64) -> super::Result<<C as Composition>::SmtExpression>;
+pub type MemoryRangeWriteHook<C> = fn(
+    state: &mut GAState2<C>,
+    value: <C as Composition>::SmtExpression,
+    address: u64,
+) -> super::Result<()>;
 
 impl<C: Composition> HookContainer<C> {
     /// Adds a PC hook to the executor.
@@ -167,7 +167,13 @@ impl<C: Composition> HookContainer<C> {
     ) -> Result<()> {
         let program = match map.get_by_regex(pattern) {
             Some(pattern) => pattern,
-            None => return Err(crate::GAError::EntryFunctionNotFound(pattern.to_string())),
+            None => {
+                warn!(
+                    "{:?}",
+                    crate::GAError::EntryFunctionNotFound(pattern.to_string())
+                );
+                return Ok(());
+            }
         };
 
         self.add_pc_hook(program.bounds.0, hook);
@@ -384,7 +390,7 @@ impl<C: Composition> HookContainer<C> {
             Ok(())
         };
 
-        ret.add_pc_hook_regex(map, r"^panic_$", PCHook2::EndFailure("panic"))?;
+        ret.add_pc_hook_regex(map, r"^panic_.*", PCHook2::EndFailure("panic"))?;
         ret.add_pc_hook_regex(
             map,
             r"^panic_cold_explicit$",
@@ -412,6 +418,8 @@ impl<C: Composition> HookContainer<C> {
             PCHook2::Intrinsic(start_cyclecount),
         )?;
         ret.add_pc_hook_regex(map, r"^end_cyclecount$", PCHook2::Intrinsic(end_cyclecount))?;
+
+        ret.add_pc_hook(0xfffffffe, PCHook2::EndSuccess);
         Ok(ret)
     }
 }

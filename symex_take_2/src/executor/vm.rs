@@ -2,7 +2,9 @@
 
 use super::{hooks::HookContainer, state::GAState2, GAExecutor, PathResult};
 use crate::{
+    arch::SupportedArchitecture,
     path_selection::{DFSPathSelection, Path},
+    project::dwarf_helper::SubProgram,
     smt::{SmtMap, SmtSolver},
     Composition,
     Result,
@@ -18,25 +20,28 @@ impl<C: Composition> VM<C> {
     pub fn new(
         project: <C::Memory as SmtMap>::ProgramMemory,
         ctx: &C::SMT,
-        fn_name: &str,
+        function: &SubProgram,
         end_pc: u64,
         state_container: C::StateContainer,
         hooks: HookContainer<C>,
+        architecture: SupportedArchitecture,
     ) -> Result<Self> {
         let mut vm = Self {
             project: project.clone(),
             paths: DFSPathSelection::new(),
         };
 
-        let state = GAState2::<C>::new(
+        let mut state = GAState2::<C>::new(
             ctx.clone(),
             ctx.clone(),
             project,
             hooks,
-            fn_name,
+            &function.name,
             end_pc,
             state_container,
+            architecture,
         )?;
+        let _ = state.memory.set_pc(function.bounds.0 as u32)?;
 
         vm.paths.save_path(Path::new(state, None));
 
@@ -57,7 +62,10 @@ impl<C: Composition> VM<C> {
         vm
     }
 
-    pub fn run(&mut self) -> Result<Option<(PathResult<C>, GAState2<C>, Vec<C::SmtExpression>)>> {
+    pub fn run(
+        &mut self,
+        logger: &mut C::Logger,
+    ) -> Result<Option<(PathResult<C>, GAState2<C>, Vec<C::SmtExpression>)>> {
         if let Some(path) = self.paths.get_path() {
             // try stuff
             let mut executor = GAExecutor::from_state(path.state, self, self.project.clone());
@@ -66,7 +74,7 @@ impl<C: Composition> VM<C> {
                 executor.state.constraints.assert(&constraint);
             }
 
-            let result = executor.resume_execution()?;
+            let result = executor.resume_execution(logger)?;
             return Ok(Some((result, executor.state, path.constraints)));
         }
         Ok(None)

@@ -2,7 +2,7 @@ use symex::{
     general_assembly::{
         arch::arm::v6::ArmV6M, project::MemoryHookAddress, state::GAState, Result, RunConfig,
     },
-    run_elf::{run_elf, run_elf_configured},
+    run_elf::run_elf_configured,
     smt::DExpr,
 };
 

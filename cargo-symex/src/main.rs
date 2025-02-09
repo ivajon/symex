@@ -4,9 +4,9 @@ use log::debug;
 #[cfg(feature = "llvm")]
 use std::{fs, path::PathBuf};
 #[cfg(feature = "llvm")]
-use symex::run::{self, RunConfig, SolveFor};
+use symex_take_2::run::{self, RunConfig, SolveFor};
 
-const BINARY_NAME: &str = "symex";
+const BINARY_NAME: &str = "symex_take_2";
 
 mod args;
 mod build;
@@ -74,6 +74,11 @@ fn run() -> Result<()> {
 
 #[cfg(not(feature = "llvm"))]
 fn run_elf(args: Args) -> Result<()> {
+    use symex_take_2::{
+        defaults::{boolector::Symex, logger::SimpleLogger},
+        smt::smt_boolector::Boolector,
+    };
+
     use crate::build::generate_binary_build_command;
 
     debug!("Run elf file.");
@@ -103,7 +108,20 @@ fn run_elf(args: Args) -> Result<()> {
     };
     debug!("Starting analasys on target: {path}, function: {function_name}");
 
-    symex::run_elf::run_elf(&path, &function_name, true)?;
+    let mut executor: Symex = symex_take_2::initiation::SymexConstructor::new(&path)
+        .load_binary()
+        .unwrap()
+        .discover()
+        .unwrap()
+        .configure_smt::<Boolector>()
+        .compose(|| (), |map| SimpleLogger::from_sub_programs(map))
+        .unwrap();
+
+    let result = executor.run(&function_name).unwrap();
+
+    println!("DONE!");
+    println!("{}", result);
+    //symex_take_2::run_elf::run_elf(&path, &function_name, true)?;
     Ok(())
 }
 

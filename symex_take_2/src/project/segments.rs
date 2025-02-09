@@ -1,6 +1,7 @@
 //! A loader that can load all segments from a elf file properly.
 
 use object::{read::elf::ProgramHeader, File, Object};
+use tracing::warn;
 pub struct Segment {
     data: Vec<u8>,
     start_address: u64,
@@ -48,6 +49,10 @@ impl Segments {
         for segment in &self.0 {
             if address >= segment.start_address && address < segment.end_address {
                 let offset = (address - segment.start_address) as usize;
+                if (offset + bytes) as u64 > segment.end_address {
+                    warn!("Trying to read accross memory segments!");
+                    return None;
+                }
                 let data_slice = &segment.data[offset..(offset + bytes)];
                 return Some(data_slice);
             }

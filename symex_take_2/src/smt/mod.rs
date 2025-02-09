@@ -1,15 +1,9 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 use boolector::SolverResult;
-use general_assembly::{operand::RawDataWord, prelude::DataWord, shift::Shift};
+use general_assembly::{prelude::DataWord, shift::Shift};
 
-use crate::{
-    executor::instruction::Instruction2,
-    memory::MemoryError as MemoryFileError,
-    Composition,
-    Endianness,
-    GAError,
-};
+use crate::{memory::MemoryError as MemoryFileError, Endianness, GAError};
 
 pub mod smt_boolector;
 
@@ -86,7 +80,7 @@ pub trait ProgramMemory: Debug + Clone {
         self.get_ptr_size()
     }
 }
-pub trait SmtMap: Debug + Clone {
+pub trait SmtMap: Debug + Clone + Display {
     type Expression: SmtExpr;
     type SMT: SmtSolver<Expression = Self::Expression>;
     type ProgramMemory: ProgramMemory;
@@ -135,7 +129,7 @@ pub trait SmtMap: Debug + Clone {
     fn from_bool(&self, value: bool) -> Self::Expression;
 
     #[must_use]
-    fn unconstrained(&self, name: &str, size: usize) -> Self::Expression;
+    fn unconstrained(&mut self, name: &str, size: usize) -> Self::Expression;
 
     #[must_use]
     /// Returns the pointer size of the system.
@@ -157,8 +151,7 @@ pub trait SmtSolver: Debug + Clone {
     type Memory: SmtMap<SMT = Self, Expression = Self::Expression>;
 
     #[must_use]
-    /// Borrows the underlying memory.
-    fn borrow_memory(&self) -> &Self::Memory;
+    fn new() -> Self;
 
     #[must_use]
     /// Creates a new unconstrained value of size `size` with the label `name`.
@@ -196,10 +189,6 @@ pub trait SmtSolver: Debug + Clone {
     #[must_use]
     /// Create an expression of size `bits` containing the minimum signed value.
     fn signed_min(&self, size: u32) -> Self::Expression;
-
-    fn new() -> Self
-    where
-        Self: Sized;
 
     #[allow(clippy::unused_self)]
     fn check_sat_result(&self, sat_result: SolverResult) -> Result<bool, SolverError> {

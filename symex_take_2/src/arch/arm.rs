@@ -8,12 +8,12 @@ use super::ArchError;
 
 #[non_exhaustive]
 #[allow(dead_code)]
-enum ArmIsa {
+pub(super) enum ArmIsa {
     ArmV6M,
     ArmV7EM,
 }
 
-fn arm_isa<'a, T: ObjectSection<'a>>(section: &T) -> Result<ArmIsa, ArchError> {
+pub(super) fn arm_isa<'a, T: ObjectSection<'a>>(section: &T) -> Result<ArmIsa, ArchError> {
     let data = section.data().map_err(|_| ArchError::MalformedSection)?;
     // Magic extraction
     //

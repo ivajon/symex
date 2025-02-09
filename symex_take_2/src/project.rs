@@ -1,9 +1,6 @@
 use std::fmt::Debug;
 
-use general_assembly::{
-    operand::RawDataWord,
-    prelude::{DataHalfWord, DataWord},
-};
+use general_assembly::prelude::{DataHalfWord, DataWord};
 use hashbrown::HashMap;
 use object::Object;
 use segments::Segments;

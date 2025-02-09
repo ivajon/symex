@@ -23,8 +23,8 @@
 
 use std::fmt::Debug;
 
-use arch::{ArchError, Architecture};
-use executor::hooks::StateContainer;
+use arch::ArchError;
+use executor::hooks::UserStateContainer;
 use logging::Logger;
 use memory::MemoryError;
 use project::ProjectError;
@@ -32,7 +32,7 @@ use smt::{SmtExpr, SmtMap, SmtSolver, SolverError};
 
 pub mod arch;
 pub mod defaults;
-pub mod elf_util;
+//pub mod elf_util;
 pub mod executor;
 pub mod initiation;
 pub mod logging;
@@ -49,15 +49,14 @@ pub type Result<T> = std::result::Result<T, GAError>;
 pub trait Composition: Clone + Debug {
     /// The state container, this can be either only architecture specific data
     /// or it may include user provided data.
-    type StateContainer: StateContainer<Architecture = Self::Architecture> + Clone;
+    type StateContainer: UserStateContainer + Clone;
     type SMT: SmtSolver<Memory = Self::Memory, Expression = Self::SmtExpression>;
-    type Architecture: Architecture + AsMut<Self::Architecture> + ?Sized;
     type Logger: Logger;
 
     type SmtExpression: SmtExpr;
     type Memory: SmtMap<SMT = Self::SMT, Expression = <Self::SMT as SmtSolver>::Expression>;
 
-    fn logger(&mut self) -> &mut Self::Logger;
+    fn logger<'a>() -> &'a mut Self::Logger;
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
@@ -88,6 +87,9 @@ pub enum GAError {
 
     #[error("Architecture error.")]
     ArchError(#[from] ArchError),
+
+    #[error("Tried to resolve architecture to non supported architecture after configuration.")]
+    InvalidArchitectureRequested,
 }
 
 #[derive(Debug, Clone, Copy)]

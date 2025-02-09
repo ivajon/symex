@@ -16,12 +16,7 @@ use super::ArmV6M;
 use crate::executor::instruction::Instruction2 as GAInstruction;
 
 impl ArmV6M {
-    pub(super) fn expand<
-        ArchitechtureImplementation: AsMut<Self> + ?Sized,
-        C: crate::Composition<Architecture = ArchitechtureImplementation>,
-    >(
-        instr: Instruction,
-    ) -> GAInstruction<C> {
+    pub(super) fn expand<C: crate::Composition>(instr: Instruction) -> GAInstruction<C> {
         let operations = match &instr.operation {
             Operation::UDF { .. } => todo!(),
             Operation::ADCReg { m, n, d } => {

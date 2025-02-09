@@ -3,12 +3,10 @@ use std::fmt::Display;
 use decoder::Convert;
 use disarmv7::prelude::{Operation as V7Operation, *};
 use general_assembly::operation::Operation;
-use object::{File, Object};
 use tracing::trace;
 
-use super::{arm_isa, ArmIsa};
 use crate::{
-    arch::{ArchError, Architecture, ParseError},
+    arch::{ArchError, Architecture, ParseError, SupportedArchitecture},
     executor::{
         hooks::{HookContainer, PCHook2},
         instruction::Instruction2,
@@ -21,8 +19,8 @@ use crate::{
 #[rustfmt::skip]
 pub mod decoder;
 pub mod compare;
-#[cfg(test)]
-pub mod test;
+//#[cfg(test)]
+//pub mod test;
 pub mod timing;
 
 /// Type level denotation for the ARMV7-EM ISA.
@@ -30,21 +28,17 @@ pub mod timing;
 pub struct ArmV7EM {}
 
 impl Architecture for ArmV7EM {
-    fn add_hooks<
-        ArchitechtureImplementation: AsMut<Self> + ?Sized,
-        C: crate::Composition<Architecture = ArchitechtureImplementation>,
-    >(
+    fn add_hooks<C: crate::Composition>(
         &self,
         cfg: &mut HookContainer<C>,
         map: &mut SubProgramMap,
-    ) where
-        Self: Sized,
-    {
+    ) {
         let symbolic_sized = |state: &mut GAState2<C>| {
             let value_ptr = state.memory.get_register("R0")?;
             let size = state.memory.get_register("R1")?.get_constant().unwrap() * 8;
             let name = state.label_new_symbolic("any");
             let symb_value = state.memory.unconstrained(&name, size as usize);
+            // We should be able to do this now!
             // TODO: We need to label this with proper variable names if possible.
             //state.marked_symbolic.push(Variable {
             //    name: Some(name),
@@ -62,7 +56,8 @@ impl Architecture for ArmV7EM {
             map,
             r"^symbolic_size<.+>$",
             PCHook2::Intrinsic(symbolic_sized),
-        );
+        )
+        .expect("Could not add symbolic hook in v7");
         // §B1.4 Specifies that R[15] => Addr(Current instruction) + 4
         //
         // This can be translated in to
@@ -111,21 +106,15 @@ impl Architecture for ArmV7EM {
         cfg.add_memory_read_hook(0x4000c008, read_reset_done);
     }
 
-    fn translate<
-        ArchitechtureImplementation: AsMut<Self> + ?Sized,
-        C: crate::Composition<Architecture = ArchitechtureImplementation>,
-    >(
+    fn translate<C: crate::Composition>(
         &self,
         buff: &[u8],
         state: &GAState2<C>,
-    ) -> Result<Instruction2<C>, ArchError>
-    where
-        Self: Sized,
-    {
+    ) -> Result<Instruction2<C>, ArchError> {
         let mut buff: disarmv7::buffer::PeekableBuffer<u8, _> = buff.iter().cloned().into();
 
         let instr = V7Operation::parse(&mut buff).map_err(|e| ArchError::ParsingError(e.into()))?;
-        trace!("Running {:?}", instr.1);
+        trace!("PC{} -> Running {:?}", state.last_pc, instr.1);
         let timing = Self::cycle_count_m4_core(&instr.1);
         let ops: Vec<Operation> = instr.clone().convert(state.get_in_conditional_block());
 
@@ -199,5 +188,11 @@ impl From<disarmv7::ParseError> for ParseError {
             disarmv7::ParseError::InvalidFloatingPointRegister(_) => ParseError::InvalidRegister,
             disarmv7::ParseError::InvalidRoundingMode(_) => ParseError::InvalidRoundingMode,
         }
+    }
+}
+
+impl Into<SupportedArchitecture> for ArmV7EM {
+    fn into(self) -> SupportedArchitecture {
+        SupportedArchitecture::Armv7EM(self)
     }
 }

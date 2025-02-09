@@ -15,7 +15,7 @@ log = "0.4.17"
 regex = "1.6.0"
 rustc_version = "0.4.0"
 rustc-demangle = "0.1.21"
-symex = { path = "../symex", version = "*" }
+symex_take_2 = { path = "../symex_take_2/", version = "*" }
 colored = "2.0.0"
 tracing = "0.1"
 tracing-subscriber = "0.3"
@@ -23,4 +23,4 @@ tracing-subscriber = "0.3"
 
 [features]
 # Defines a feature named `llvm` that enables symbolic execution at LLVM-IR level
-llvm = ["symex/llvm"]
+llvm = []

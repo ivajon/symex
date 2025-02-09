@@ -1,100 +1,50 @@
 use std::marker::PhantomData;
 
+use super::logger::SimpleLogger;
 use crate::{
     arch::Architecture,
-    executor::hooks::StateContainer,
+    executor::hooks::UserStateContainer,
     logging::NoLogger,
+    manager::SymexArbiter,
     memory::array_memory::BoolectorMemory,
     smt::smt_boolector::{Boolector, BoolectorExpr},
     Composition,
 };
 
+pub type Symex = SymexArbiter<DefaultComposition>;
+pub type SymexWithState<Data> = SymexArbiter<UserState<Data>>;
+
 #[derive(Clone, Debug)]
 /// Default configuration for a defined architecture.
-pub struct DefaultComposition<A: Architecture + ?Sized> {
-    _a: PhantomData<A>,
-}
+pub struct DefaultComposition {}
 
-impl<A: Architecture + StateContainer> Composition for DefaultComposition<A>
-where
-    Box<A>: Clone,
-    A: Clone,
-{
-    type Architecture = A;
-    type Logger = NoLogger;
+impl Composition for DefaultComposition {
+    type Logger = SimpleLogger;
     type Memory = BoolectorMemory;
     type SMT = Boolector;
     type SmtExpression = BoolectorExpr;
-    type StateContainer = Box<A>;
+    type StateContainer = ();
 
-    fn logger(&mut self) -> &mut Self::Logger {
+    fn logger<'a>() -> &'a mut Self::Logger {
         todo!()
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct DynamicBoolectorBacked;
-
-impl Composition for DynamicBoolectorBacked {
-    type Architecture = dyn Architecture;
-    type Logger = NoLogger;
-    type Memory = BoolectorMemory;
-    type SMT = Boolector;
-    type SmtExpression = BoolectorExpr;
-    type StateContainer = Box<Self::Architecture>;
-
-    fn logger(&mut self) -> &mut Self::Logger {
-        todo!()
-    }
-}
-
-impl<A: Architecture + ?Sized> StateContainer for Box<A>
-where
-    Box<A>: Clone,
-{
-    type Architecture = A;
-
-    fn as_arch(&mut self) -> &mut Self::Architecture {
-        self
-    }
-}
+impl<A: Architecture + ?Sized> UserStateContainer for Box<A> where Box<A>: Clone {}
 
 #[derive(Clone, Debug)]
-pub struct UserStateDynamicArch<State: StateContainer<Architecture = dyn Architecture>> {
+pub struct UserState<State: UserStateContainer> {
     state: PhantomData<State>,
 }
 
-impl<State: StateContainer<Architecture = dyn Architecture>> Composition
-    for UserStateDynamicArch<State>
-{
-    type Architecture = State::Architecture;
+impl<State: UserStateContainer> Composition for UserState<State> {
     type Logger = NoLogger;
     type Memory = BoolectorMemory;
     type SMT = Boolector;
     type SmtExpression = BoolectorExpr;
     type StateContainer = State;
 
-    fn logger(&mut self) -> &mut Self::Logger {
-        todo!()
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct UserState<A: Architecture, State: StateContainer<Architecture = A>> {
-    state: PhantomData<State>,
-}
-
-impl<A: Architecture + Clone, State: StateContainer<Architecture = A> + Clone> Composition
-    for UserState<A, State>
-{
-    type Architecture = A;
-    type Logger = NoLogger;
-    type Memory = BoolectorMemory;
-    type SMT = Boolector;
-    type SmtExpression = BoolectorExpr;
-    type StateContainer = State;
-
-    fn logger(&mut self) -> &mut Self::Logger {
+    fn logger<'a>() -> &'a mut Self::Logger {
         todo!()
     }
 }

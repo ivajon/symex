@@ -10,15 +10,9 @@ pub mod arm;
 /// Defines discovery behaviour for the architectures.
 pub mod discover;
 
-use std::{
-    fmt::{Debug, Display},
-    pin::Pin,
-    rc::Rc,
-};
+use std::fmt::{Debug, Display};
 
 use arm::{v6::ArmV6M, v7::ArmV7EM};
-use dyn_clone::DynClone;
-use object::File;
 use thiserror::Error;
 
 use crate::{
@@ -26,17 +20,6 @@ use crate::{
     project::dwarf_helper::SubProgramMap,
     Composition,
 };
-
-/// Enumerates the discoverable machine code formats.
-///
-/// # Note
-///
-/// One might add support for other formats using the [`Arch`] trait with the
-/// caveat that they cannot be automatically discovered.
-pub enum SupportedArchitechture {
-    ArmV7EM(ArmV7EM),
-    ArmV6M(ArmV6M),
-}
 
 #[derive(Debug, Eq, PartialEq, PartialOrd, Clone, Error)]
 /// General architecture related errors.
@@ -102,25 +85,36 @@ pub enum ParseError {
     Generic(&'static str),
 }
 
+/// Enumerates the discoverable machine code formats.
+///
+/// # Note
+///
+/// One might add support for other formats using the [`Arch`] trait with the
+/// caveat that they cannot be automatically discovered.
+#[derive(Debug, Clone)]
 pub enum SupportedArchitecture {
     Armv7EM(ArmV7EM),
-    Armv6EM(ArmV6M),
+    Armv6M(ArmV6M),
 }
 
 /// A generic architecture
 ///
 /// Denotes that the implementer can be treated as an architecture in this
 /// crate.
-pub trait Architecture: Debug + Display + DynClone {
+pub trait Architecture: Debug + Display + Into<SupportedArchitecture> {
     /// Converts a slice of bytes to an [`Instruction`]
-    fn translate<C: Composition<Architecture = Self>>(
+    fn translate<C: Composition>(
         &self,
         buff: &[u8],
         state: &GAState2<C>,
     ) -> Result<Instruction2<C>, ArchError>;
 
     /// Adds the architecture specific hooks to the [`RunConfig`]
-    fn add_hooks(&self, sub_program_lookup: &mut SubProgramMap);
+    fn add_hooks<C: Composition>(
+        &self,
+        hooks: &mut HookContainer<C>,
+        sub_program_lookup: &mut SubProgramMap,
+    );
 
     /// Creates a new instance of the architecture
     fn new() -> Self
@@ -128,4 +122,52 @@ pub trait Architecture: Debug + Display + DynClone {
         Self: Sized;
 }
 
-dyn_clone::clone_trait_object!(Architecture<Composition = dyn Composition>);
+impl SupportedArchitecture {
+    /// Converts a slice of bytes to an [`Instruction`]
+    pub fn translate<C: Composition>(
+        &self,
+        buff: &[u8],
+        state: &GAState2<C>,
+    ) -> Result<Instruction2<C>, ArchError> {
+        match self {
+            Self::Armv6M(a) => a.translate(buff, state),
+            Self::Armv7EM(a) => a.translate(buff, state),
+        }
+    }
+
+    /// Adds the architecture specific hooks to the [`RunConfig`]
+    pub fn add_hooks<C: Composition>(
+        &self,
+        hooks: &mut HookContainer<C>,
+        sub_program_lookup: &mut SubProgramMap,
+    ) {
+        match self {
+            Self::Armv6M(a) => a.add_hooks(hooks, sub_program_lookup),
+            Self::Armv7EM(a) => a.add_hooks(hooks, sub_program_lookup),
+        }
+    }
+}
+
+pub trait TryAsMut<T> {
+    #[must_use]
+    /// Tries to convert the value to another value.
+    fn try_mut(&mut self) -> crate::Result<&mut T>;
+}
+
+impl TryAsMut<ArmV7EM> for SupportedArchitecture {
+    fn try_mut(&mut self) -> crate::Result<&mut ArmV7EM> {
+        match self {
+            Self::Armv7EM(a) => Ok(a),
+            _ => Err(crate::GAError::InvalidArchitectureRequested),
+        }
+    }
+}
+
+impl TryAsMut<ArmV6M> for SupportedArchitecture {
+    fn try_mut(&mut self) -> crate::Result<&mut ArmV6M> {
+        match self {
+            Self::Armv6M(a) => Ok(a),
+            _ => Err(crate::GAError::InvalidArchitectureRequested),
+        }
+    }
+}

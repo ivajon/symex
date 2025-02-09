@@ -250,7 +250,10 @@ impl BoolectorExpr {
         if self.len() <= 64 {
             let width = self.len() as usize;
             // If we for some reason get less binary digits, pad the start with zeroes.
-            format!("{:0width$b}", self.get_constant().unwrap())
+            match self.get_constant() {
+                Some(val) => format!("{:0width$b}", val),
+                None => format!("(non constant) {:?}", self),
+            }
         } else {
             let upper = self.slice(64, self.len() - 1).to_binary_string();
             let lower = self.slice(0, 63).to_binary_string();

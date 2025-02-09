@@ -166,12 +166,7 @@ impl super::ArmV7EM {
         }
     }
 
-    pub fn cycle_count_m4_core<
-        ArchitechtureImplementation: AsMut<Self> + ?Sized,
-        C: crate::Composition<Architecture = ArchitechtureImplementation>,
-    >(
-        instr: &V7Operation,
-    ) -> CycleCount2<C> {
+    pub fn cycle_count_m4_core<C: crate::Composition>(instr: &V7Operation) -> CycleCount2<C> {
         let p = 3;
         let pipeline = |state: &mut GAState2<C>| match state.get_last_instruction() {
             Some(instr) => match instr.memory_access {
@@ -238,7 +233,7 @@ impl super::ArmV7EM {
             V7Operation::Blx(_) => CycleCount2::Value(1 + 3),
             V7Operation::Bx(_) => CycleCount2::Value(1 + 3),
             V7Operation::Cbz(_) => {
-                let counter = |state: &GAState2<C>| match state.get_has_jumped() {
+                let counter = |state: &mut GAState2<C>| match state.get_has_jumped() {
                     true => 1 + 3,
                     false => 1,
                 };
@@ -257,7 +252,7 @@ impl super::ArmV7EM {
             V7Operation::Isb(_) => todo!("This requires a model of barriers"),
             // TODO! Add detection for whether this is folded or not, if it is the value here is 0
             V7Operation::It(_) => {
-                let counter = |state: &GAState2<C>| match state.get_last_instruction() {
+                let counter = |state: &mut GAState2<C>| match state.get_last_instruction() {
                     Some(instr) => match instr.instruction_size {
                         16 => 0,
                         _ => 1,

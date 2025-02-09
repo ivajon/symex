@@ -7,9 +7,9 @@ use object::{Object, ObjectSection, ObjectSymbol};
 use tracing::debug;
 
 use crate::{
-    arch::{Architecture, SupportedArchitechture},
-    defaults::boolector::UserStateDynamicArch,
-    executor::hooks::{HookContainer, PCHook2, StateContainer},
+    arch::SupportedArchitecture,
+    defaults::boolector::UserState,
+    executor::hooks::{HookContainer, PCHook2, UserStateContainer},
     logging::NoLogger,
     manager::SymexArbiter,
     project::{dwarf_helper::SubProgramMap, Project, ProjectError},
@@ -18,7 +18,7 @@ use crate::{
     Endianness,
 };
 
-pub mod run_config;
+//pub mod run_config;
 
 mod sealed {
 
@@ -28,21 +28,27 @@ mod sealed {
 }
 use sealed::*;
 
+#[doc(hidden)]
 pub struct SmtConfigured<Smt: SmtSolver> {
     smt: Smt,
 }
 
+#[doc(hidden)]
 pub struct SmtNotConfigured;
 
+#[doc(hidden)]
 pub struct BinaryLoaded<'file> {
     object: object::File<'file>,
 }
 
+#[doc(hidden)]
 pub struct BinaryNotLoaded;
 
+#[doc(hidden)]
 #[derive(Debug, Clone)]
-struct NoArchOverride;
+pub struct NoArchOverride;
 
+#[doc(hidden)]
 pub struct SymexConstructor<
     'str,
     Override: ArchOverride,
@@ -56,7 +62,7 @@ pub struct SymexConstructor<
 }
 
 impl<'str> SymexConstructor<'str, NoArchOverride, SmtNotConfigured, BinaryNotLoaded> {
-    const fn new(path: &'str str) -> Self {
+    pub const fn new(path: &'str str) -> Self {
         Self {
             file: path,
             override_arch: NoArchOverride,
@@ -69,10 +75,13 @@ impl<'str> SymexConstructor<'str, NoArchOverride, SmtNotConfigured, BinaryNotLoa
 impl<'str, S: SmtSolverConfigured, B: BinaryLoadingDone>
     SymexConstructor<'str, NoArchOverride, S, B>
 {
-    pub fn override_architecture<A: Architecture>(self) -> SymexConstructor<'str, Box<A>, S, B> {
-        SymexConstructor::<'str, Box<A>, S, B> {
+    pub fn override_architecture<A: Into<SupportedArchitecture>>(
+        self,
+        a: A,
+    ) -> SymexConstructor<'str, SupportedArchitecture, S, B> {
+        SymexConstructor::<'str, SupportedArchitecture, S, B> {
             file: self.file,
-            override_arch: Box::new(A::new()),
+            override_arch: a.into(),
             smt: self.smt,
             binary_file: self.binary_file,
         }
@@ -123,12 +132,8 @@ impl<'str, 'file, S: SmtSolverConfigured>
 {
     pub fn discover(
         self,
-    ) -> crate::Result<SymexConstructor<'str, Box<dyn Architecture>, S, BinaryLoaded<'file>>> {
-        let arch = SupportedArchitechture::discover(&self.binary_file.object)?;
-        let arch = match arch {
-            SupportedArchitechture::ArmV6M(a) => Box::new(a) as Box<dyn Architecture>,
-            SupportedArchitechture::ArmV7EM(a) => Box::new(a),
-        };
+    ) -> crate::Result<SymexConstructor<'str, SupportedArchitecture, S, BinaryLoaded<'file>>> {
+        let arch = SupportedArchitecture::discover(&self.binary_file.object)?;
 
         Ok(SymexConstructor {
             file: self.file,
@@ -139,13 +144,17 @@ impl<'str, 'file, S: SmtSolverConfigured>
     }
 }
 
-impl<'str, 'file, A: Architecture + ?Sized, S: SmtSolver>
-    SymexConstructor<'str, Box<A>, SmtConfigured<S>, BinaryLoaded<'file>>
+impl<'str, 'file, S: SmtSolver>
+    SymexConstructor<'str, SupportedArchitecture, SmtConfigured<S>, BinaryLoaded<'file>>
 {
-    pub fn compose<C: Composition, StateCreator: FnOnce(Box<A>) -> C::StateContainer>(
+    pub fn compose<
+        C: Composition,
+        StateCreator: FnOnce() -> C::StateContainer,
+        LoggingCreator: FnOnce(&SubProgramMap) -> C::Logger,
+    >(
         self,
         user_state_composer: StateCreator,
-        logger: C::Logger,
+        logger: LoggingCreator,
     ) -> crate::Result<SymexArbiter<C>>
     where
         C::Memory: SmtMap<ProgramMemory = &'static Project>,
@@ -186,81 +195,61 @@ impl<'str, 'file, A: Architecture + ?Sized, S: SmtSolver>
         let debug_str = binary.section_by_name(".debug_str").unwrap();
         let debug_str = DebugStr::new(debug_str.data().unwrap(), gimli_endian);
 
-        let map = SubProgramMap::new(&debug_info, &debug_abbrev, &debug_str);
-        let hooks = HookContainer::default(&map)?;
+        let mut map = SubProgramMap::new(&debug_info, &debug_abbrev, &debug_str);
+        let mut hooks = HookContainer::default(&map)?;
+        self.override_arch.add_hooks(&mut hooks, &mut map);
 
         let project = Box::new(Project::from_binary(binary, symtab)?);
         let project = Box::leak(project);
 
         Ok(SymexArbiter::<C>::new(
-            logger,
+            logger(&map),
             project,
             smt,
-            user_state_composer(self.override_arch),
+            user_state_composer(),
             hooks,
             map,
+            self.override_arch,
         ))
     }
 }
 
 impl Display for NoArchOverride {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        #[derive(Debug)]
-        struct SomeUserState<A: Architecture + ?Sized> {
+        #[derive(Debug, Clone)]
+        struct SomeUserState {
             sp_writes: Vec<u64>,
-            a: Box<A>,
         }
 
-        impl<A: Architecture + ?Sized> Clone for SomeUserState<A>
-        where
-            Box<A>: Clone,
-        {
-            fn clone(&self) -> Self {
-                Self {
-                    sp_writes: self.sp_writes.clone(),
-                    a: self.a.clone(),
-                }
-            }
-        }
+        impl UserStateContainer for SomeUserState {}
 
-        impl<A: Architecture + ?Sized> StateContainer for SomeUserState<A>
-        where
-            Box<A>: Clone,
-        {
-            type Architecture = A;
-
-            fn as_arch(&mut self) -> &mut Self::Architecture {
-                &mut self.a
-            }
-        }
-
-        impl<A: Architecture + ?Sized> SomeUserState<A> {
-            fn new(a: Box<A>) -> Self {
+        impl SomeUserState {
+            fn new() -> Self {
                 Self {
                     sp_writes: Vec::new(),
-                    a,
                 }
             }
         }
 
-        let mut symex: SymexArbiter<UserStateDynamicArch<SomeUserState<_>>> =
-            SymexConstructor::new("asd")
-                .load_binary()
-                .unwrap()
-                .discover()
-                .unwrap()
-                //.override_architecture::<crate::arch::arm::v7::ArmV7EM>()
-                .configure_smt()
-                .compose(|a| SomeUserState::new(a), NoLogger)
-                .unwrap();
+        let mut symex: SymexArbiter<UserState<SomeUserState>> = SymexConstructor::new("asd")
+            .load_binary()
+            .unwrap()
+            .discover()
+            .unwrap()
+            //.override_architecture::<crate::arch::arm::v7::ArmV7EM>()
+            .configure_smt()
+            .compose(|| SomeUserState::new(), |_| NoLogger)
+            .unwrap();
 
         let _res = symex.add_hooks(|hook_container, lookup| {
             hook_container.add_pc_hook(0x1234, PCHook2::Continue);
-            hook_container.add_pc_hook_regex(
-                lookup,
-                r"some_function",
-                PCHook2::Intrinsic(|_state| Ok(())),
-            );
+            hook_container
+                .add_pc_hook_regex(
+                    lookup,
+                    r"some_function",
+                    PCHook2::Intrinsic(|_state| Ok(())),
+                )
+                .expect("Initiation failed!");
 
             // Get the stack pointer writes.
             hook_container.add_register_write_hook("SP".to_string(), |state, value| {
@@ -276,7 +265,7 @@ impl Display for NoArchOverride {
     }
 }
 
-impl<A: Architecture + ?Sized> ArchOverride for Box<A> {}
+impl ArchOverride for SupportedArchitecture {}
 impl ArchOverride for NoArchOverride {}
 
 impl SmtSolverConfigured for SmtNotConfigured {}

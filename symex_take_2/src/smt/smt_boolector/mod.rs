@@ -21,18 +21,20 @@ use crate::memory::array_memory::BoolectorMemory;
 #[derive(Clone, Debug)]
 pub struct Boolector {
     pub ctx: Rc<Btor>,
-    memory: BoolectorMemory,
 }
 
 impl SmtSolver for Boolector {
     type Expression = BoolectorExpr;
     type Memory = BoolectorMemory;
 
-    fn new() -> Self
-    where
-        Self: Sized,
-    {
-        todo!()
+    fn new() -> Self {
+        let ctx = Rc::new(Btor::new());
+
+        ctx.set_opt(BtorOption::Incremental(true));
+        ctx.set_opt(BtorOption::PrettyPrint(true));
+        ctx.set_opt(BtorOption::OutputNumberFormat(NumberFormat::Hexadecimal));
+
+        Self { ctx }
     }
 
     fn one(&self, bits: u32) -> Self::Expression {
@@ -45,10 +47,6 @@ impl SmtSolver for Boolector {
 
     fn zero(&self, size: u32) -> Self::Expression {
         self._zero(size)
-    }
-
-    fn borrow_memory(&self) -> &Self::Memory {
-        &self.memory
     }
 
     fn unconstrained(&self, size: u32, name: &str) -> Self::Expression {

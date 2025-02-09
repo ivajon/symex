@@ -8,7 +8,7 @@ members = [
     "crates/symex_lib",
     "crates/valid_derive",
     # "armv6-m-examples", # <- has its own profiles, so not proper member
-    "wcet-analasis-example",
+    "wcet-analasis-example", "symex_take_2",
 ]
 exclude = ["symex-llvm-14-legacy"]
 

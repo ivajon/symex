@@ -6,7 +6,7 @@ use armv6_m_instruction_parser::Error;
 use tracing::trace;
 
 use crate::{
-    arch::{ArchError, Architecture, ParseError},
+    arch::{ArchError, Architecture, ParseError, SupportedArchitecture},
     executor::{hooks::PCHook2, state::GAState2},
     smt::{SmtExpr, SmtMap},
 };
@@ -20,32 +20,29 @@ pub mod timing;
 pub struct ArmV6M {}
 
 impl Architecture for ArmV6M {
-    fn add_hooks<
-        ArchitechtureImplementation: AsMut<Self> + ?Sized,
-        C: crate::Composition<Architecture = ArchitechtureImplementation>,
-    >(
+    fn add_hooks<C: crate::Composition>(
         &self,
         cfg: &mut crate::executor::hooks::HookContainer<C>,
-        sub_program_lookup: &mut crate::project::dwarf_helper::SubProgramMap,
-    ) where
-        Self: Sized,
-    {
-        let symbolic_sized = |state: &mut GAState2<C>| {
+        map: &mut crate::project::dwarf_helper::SubProgramMap,
+    ) {
+        let symbolic_sized = |state: &mut GAState2<_>| {
             let value_ptr = state.get_register("R0".to_owned())?;
-            let size = state.get_register("R1".to_owned())?.get_constant().unwrap() * 8;
+            let size_expr: C::SmtExpression = state.get_register("R1".to_owned())?;
+            let size: u64 = size_expr.get_constant().unwrap() * 8;
             trace!(
                 "trying to create symbolic: addr: {:?}, size: {}",
                 value_ptr,
                 size
             );
             let name = state.label_new_symbolic("any");
-            let symb_value = state.memory.unconstrained(&name, size as usize);
+            let memory: &mut C::Memory = &mut state.memory;
+            let symb_value = memory.unconstrained(&name, size as usize);
             //state.marked_symbolic.push(Variable {
             //    name: Some(name),
             //    value: symb_value.clone(),
             //    ty: ExpressionType::Integer(size as usize),
             //});
-            state.memory.set(&value_ptr, symb_value)?;
+            memory.set(&value_ptr, symb_value)?;
 
             let lr = state.get_register("LR".to_owned())?;
             state.set_register("PC".to_owned(), lr)?;
@@ -53,10 +50,11 @@ impl Architecture for ArmV6M {
         };
 
         cfg.add_pc_hook_regex(
-            &sub_program_lookup,
+            &map,
             r"^symbolic_size<.+>$",
             PCHook2::Intrinsic(symbolic_sized),
-        );
+        )
+        .expect("Symbol not found in symtab");
 
         let read_pc = |state: &mut GAState2<C>| {
             let two = state.memory.from_u64(1, 32);
@@ -79,17 +77,11 @@ impl Architecture for ArmV6M {
         cfg.add_memory_read_hook(0x4000c008, read_reset_done);
     }
 
-    fn translate<
-        ArchitechtureImplementation: AsMut<Self> + ?Sized,
-        C: crate::Composition<Architecture = ArchitechtureImplementation>,
-    >(
+    fn translate<C: crate::Composition>(
         &self,
         buff: &[u8],
         _state: &GAState2<C>,
-    ) -> Result<crate::executor::instruction::Instruction2<C>, ArchError>
-    where
-        Self: Sized,
-    {
+    ) -> Result<crate::executor::instruction::Instruction2<C>, ArchError> {
         let ret = armv6_m_instruction_parser::parse(buff).map_err(map_err)?;
         let to_exec = Self::expand(ret);
         Ok(to_exec)
@@ -135,4 +127,10 @@ fn map_err(err: Error) -> ArchError {
         Error::InvalidRegister => ParseError::InvalidRegister,
         Error::InvalidCondition => ParseError::InvalidCondition,
     })
+}
+
+impl Into<SupportedArchitecture> for ArmV6M {
+    fn into(self) -> SupportedArchitecture {
+        SupportedArchitecture::Armv6M(self)
+    }
 }

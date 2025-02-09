@@ -13,6 +13,7 @@ use tracing::{debug, trace};
 use vm::VM;
 
 use crate::{
+    logging::Logger,
     path_selection::Path,
     smt::{ProgramMemory, SmtExpr, SmtMap, SmtSolver, SolverError},
     Composition,
@@ -61,7 +62,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
         }
     }
 
-    pub fn resume_execution(&mut self) -> Result<PathResult<C>> {
+    pub fn resume_execution(&mut self, logger: &mut C::Logger) -> Result<PathResult<C>> {
         let possible_continue = self.state.continue_in_instruction.to_owned();
 
         if let Some(i) = possible_continue {
@@ -104,6 +105,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
                     }
                 },
             };
+            logger.update_delimiter(self.state.last_pc);
 
             // Add cycles to cycle count
             self.state.increment_cycle_count();
@@ -256,7 +258,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
                 //
                 // Might be a good thing to throw an error here if the value is not 0 or 1.
                 self.state
-                    .set_flag(f.clone(), value.resize_unsigned(1).simplify());
+                    .set_flag(f.clone(), value.resize_unsigned(1).simplify())?;
             }
         }
         Ok(())
@@ -270,7 +272,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
         match &address.get_constant() {
             Some(addr) => Ok(*addr),
             None => {
-                // find all possible addresses
+                // Find all possible addresses
                 let addresses = self.state.constraints.get_values(&address, 255)?;
 
                 let addresses = match addresses {
@@ -288,7 +290,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
                     return Err(SolverError::Unsat.into());
                 }
 
-                // create paths for all but the first address
+                // Create paths for all but the first address
                 for addr in &addresses[1..] {
                     if self.current_operation_index
                         < self
@@ -393,7 +395,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
         Ok(())
     }
 
-    /// Execute a single operation or all operations contained inside a
+    /// Execute a single operation or all operations contained inside an
     /// operation.
     pub(crate) fn execute_operation(
         &mut self,
@@ -658,7 +660,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
                     .memory
                     .from_u64((self.project.get_word_size() - 1) as u64, 32);
                 let result = value.shift(&shift, Shift::Lsr).resize_unsigned(1);
-                self.state.set_flag("N".to_owned(), result);
+                self.state.set_flag("N".to_owned(), result)?;
             }
             Operation::SetZFlag(operand) => {
                 let value = self.get_operand_value(operand, local)?;
@@ -666,7 +668,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
                     .state
                     .memory
                     .from_u64(0, self.project.get_word_size() as usize));
-                self.state.set_flag("Z".to_owned(), result);
+                self.state.set_flag("Z".to_owned(), result)?;
             }
             Operation::SetCFlag {
                 operand1,
@@ -685,7 +687,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
                     (true, true) => {
                         // I do not now if this part is used in any ISA but it is here for
                         // completeness.
-                        let carry_in = self.state.get_flag("C".to_owned()).unwrap();
+                        let carry_in = self.state.get_flag("C".to_owned())?;
                         let op2 = op2.not();
 
                         // Check for carry on twos complement of op2
@@ -714,7 +716,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
                     (false, false) => op1.uaddo(&op2),
                 };
 
-                self.state.set_flag("C".to_owned(), result);
+                self.state.set_flag("C".to_owned(), result)?;
             }
             Operation::SetVFlag {
                 operand1,
@@ -747,7 +749,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
                     (false, false) => op1.saddo(&op2),
                 };
 
-                self.state.set_flag("V".to_owned(), result);
+                self.state.set_flag("V".to_owned(), result)?;
             }
             Operation::ForEach {
                 operands: _,
@@ -806,10 +808,13 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
                 let op = self
                     .get_operand_value(operand, local)?
                     .zero_ext(1 + self.project.get_word_size() as u32);
+                trace!("Getting worked");
                 let shift = self
                     .get_operand_value(shift, local)?
                     .zero_ext(1 + self.project.get_word_size() as u32);
+                trace!("Getting2 worked");
                 let result = op.shift(&shift, Shift::Lsl);
+                trace!("Shift ");
                 let carry = result
                     .shift(
                         &self.state.memory.from_u64(
@@ -819,7 +824,9 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
                         Shift::Lsr,
                     )
                     .resize_unsigned(1);
-                self.state.set_flag("C".to_owned(), carry);
+                trace!("Shift ");
+                self.state.set_flag("C".to_owned(), carry)?;
+                trace!("set");
             }
             Operation::SetCFlagSrl { operand, shift } => {
                 let op = self
@@ -837,7 +844,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
                     .zero_ext(1 + self.project.get_word_size() as u32);
                 let result = op.shift(&shift, Shift::Lsr);
                 let carry = result.resize_unsigned(1);
-                self.state.set_flag("C".to_owned(), carry);
+                self.state.set_flag("C".to_owned(), carry)?;
             }
             Operation::SetCFlagSra { operand, shift } => {
                 let op = self
@@ -855,7 +862,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
                     .zero_ext(1 + self.project.get_word_size() as u32);
                 let result = op.shift(&shift, Shift::Asr);
                 let carry = result.resize_unsigned(1);
-                self.state.set_flag("C".to_owned(), carry);
+                self.state.set_flag("C".to_owned(), carry)?;
             }
             Operation::SetCFlagRor(operand) => {
                 // this is right for armv6-m but may be wrong for other architectures
@@ -868,7 +875,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
                 let c = result
                     .shift(&word_size_minus_one, Shift::Lsr)
                     .resize_unsigned(1);
-                self.state.set_flag("C".to_owned(), c);
+                self.state.set_flag("C".to_owned(), c)?;
             }
             Operation::CountOnes {
                 destination,
