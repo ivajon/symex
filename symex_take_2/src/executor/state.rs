@@ -1,13 +1,14 @@
 //! Holds the state in general assembly execution.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 
 use general_assembly::prelude::Condition;
+use hashbrown::HashMap;
 use tracing::{debug, trace};
 
 use super::{
-    hooks::{HookContainer, PCHook2, Reader, ResultOrHook, Writer},
-    instruction::Instruction2,
+    hooks::{HookContainer, PCHook, Reader, ResultOrHook, Writer},
+    instruction::Instruction,
 };
 use crate::{
     arch::{SupportedArchitecture, TryAsMut},
@@ -18,31 +19,30 @@ use crate::{
     Result,
 };
 
-pub enum HookOrInstruction2<'a, C: Composition> {
-    PcHook(&'a PCHook2<C>),
-    Instruction(Instruction2<C>),
+pub enum HookOrInstruction<'a, C: Composition> {
+    PcHook(&'a PCHook<C>),
+    Instruction(Instruction<C>),
 }
 
 #[derive(Clone, Debug)]
-pub struct ContinueInsideInstruction2<C: Composition> {
-    pub instruction: Instruction2<C>,
+pub struct ContinueInsideInstruction<C: Composition> {
+    pub instruction: Instruction<C>,
     pub index: usize,
     pub local: HashMap<String, C::SmtExpression>,
 }
 
 #[derive(Clone, Debug)]
-pub struct GAState2<C: Composition> {
-    pub project: <C::Memory as SmtMap>::ProgramMemory,
+pub struct GAState<C: Composition> {
     pub memory: <C::SMT as SmtSolver>::Memory,
     pub state: C::StateContainer,
     pub constraints: C::SMT,
     pub hooks: HookContainer<C>,
     pub count_cycles: bool,
     pub cycle_count: u64,
-    pub last_instruction: Option<Instruction2<C>>,
+    pub last_instruction: Option<Instruction<C>>,
     pub last_pc: u64,
-    pub continue_in_instruction: Option<ContinueInsideInstruction2<C>>,
-    pub current_instruction: Option<Instruction2<C>>,
+    pub continue_in_instruction: Option<ContinueInsideInstruction<C>>,
+    pub current_instruction: Option<Instruction<C>>,
     pub any_counter: u64,
     pub architecture: SupportedArchitecture,
     instruction_counter: usize,
@@ -50,7 +50,7 @@ pub struct GAState2<C: Composition> {
     instruction_conditions: VecDeque<Condition>,
 }
 
-impl<C: Composition> GAState2<C> {
+impl<C: Composition> GAState<C> {
     /// Create a new state.
     pub fn new(
         ctx: C::SMT,
@@ -78,8 +78,7 @@ impl<C: Composition> GAState2<C> {
         debug!("Found stack start at addr: {:#X}.", sp_reg);
 
         let endianness = project.get_endianness();
-        let mut memory =
-            C::Memory::new(ctx.clone(), project.clone(), ptr_size as usize, endianness)?;
+        let mut memory = C::Memory::new(ctx.clone(), project, ptr_size as usize, endianness)?;
         let pc_expr = ctx.from_u64(pc_reg, ptr_size as u32);
         memory.set_register("PC", pc_expr)?;
 
@@ -90,14 +89,7 @@ impl<C: Composition> GAState2<C> {
         let end_pc_expr = ctx.from_u64(end_address, ptr_size as u32);
         memory.set_register("LR", end_pc_expr)?;
 
-        let mut flags = HashMap::new();
-        flags.insert("N".to_owned(), ctx.unconstrained(1, "flags.N"));
-        flags.insert("Z".to_owned(), ctx.unconstrained(1, "flags.Z"));
-        flags.insert("C".to_owned(), ctx.unconstrained(1, "flags.C"));
-        flags.insert("V".to_owned(), ctx.unconstrained(1, "flags.V"));
-
         Ok(Self {
-            project,
             constraints,
             memory,
             hooks,
@@ -147,7 +139,7 @@ impl<C: Composition> GAState2<C> {
     }
 
     /// Gets the last instruction that was executed.
-    pub fn get_last_instruction(&self) -> Option<Instruction2<C>> {
+    pub fn get_last_instruction(&self) -> Option<Instruction<C>> {
         self.last_instruction.clone()
     }
 
@@ -166,8 +158,8 @@ impl<C: Composition> GAState2<C> {
 
         let cycles = match &self.last_instruction {
             Some(i) => match i.max_cycle {
-                super::instruction::CycleCount2::Value(v) => v,
-                super::instruction::CycleCount2::Function(f) => f(self),
+                super::instruction::CycleCount::Value(v) => v,
+                super::instruction::CycleCount::Function(f) => f(self),
             },
             None => 0,
         };
@@ -180,7 +172,7 @@ impl<C: Composition> GAState2<C> {
     }
 
     /// Update the last instruction that was executed.
-    pub fn set_last_instruction(&mut self, instruction: Instruction2<C>) {
+    pub fn set_last_instruction(&mut self, instruction: Instruction<C>) {
         self.last_instruction = Some(instruction);
     }
 
@@ -197,49 +189,50 @@ impl<C: Composition> GAState2<C> {
             .map(|condition| self.get_expr(&condition).unwrap())
     }
 
-    ///// Create a state used for testing.
-    //pub fn create_test_state(
-    //    project: &'static Project<C::Architecture>,
-    //    ctx: C::SMT,
-    //    constraints: DSolver,
-    //    start_pc: u64,
-    //    start_stack: u64,
-    //) -> Self {
-    //    let pc_reg = start_pc;
-    //    let ptr_size = project.get_ptr_size();
-    //
-    //    let sp_reg = start_stack;
-    //    debug!("Found stack start at addr: {:#X}.", sp_reg);
-    //
-    //    let memory = C::Memory::new(ctx, ptr_size, project.get_endianness());
-    //    let mut registers = HashMap::new();
-    //    let pc_expr = ctx.from_u64(pc_reg, ptr_size);
-    //    registers.insert("PC".to_owned(), pc_expr);
-    //
-    //    let sp_expr = ctx.from_u64(sp_reg, ptr_size);
-    //    registers.insert("SP".to_owned(), sp_expr);
-    //
-    //    let mut flags = HashMap::new();
-    //    flags.insert("N".to_owned(), ctx.unconstrained(1, "flags.N"));
-    //    flags.insert("Z".to_owned(), ctx.unconstrained(1, "flags.Z"));
-    //    flags.insert("C".to_owned(), ctx.unconstrained(1, "flags.C"));
-    //    flags.insert("V".to_owned(), ctx.unconstrained(1, "flags.V"));
-    //
-    //    GAState2 {
-    //        project,
-    //        memory,
-    //        state,
-    //        count_cycles: true,
-    //        cycle_count: 0,
-    //        last_instruction: None,
-    //        last_pc: start_pc,
-    //        continue_in_instruction: None,
-    //        current_instruction: None,
-    //        instruction_counter: 0,
-    //        has_jumped: false,
-    //        instruction_conditions: VecDeque::new(),
-    //    }
-    //}
+    /// Create a state used for testing.
+    pub fn create_test_state(
+        project: <C::Memory as SmtMap>::ProgramMemory,
+        ctx: C::SMT,
+        constraints: C::SMT,
+        start_pc: u64,
+        start_stack: u64,
+        hooks: HookContainer<C>,
+        state: C::StateContainer,
+        architecture: SupportedArchitecture,
+    ) -> Self {
+        let pc_reg = start_pc;
+        //let ptr_size = project.get_ptr_size();
+
+        let sp_reg = start_stack;
+        debug!("Found stack start at addr: {:#X}.", sp_reg);
+        let end = project.get_endianness();
+
+        let memory = C::Memory::new(ctx, project, 32, end).unwrap();
+        let mut registers = HashMap::new();
+        let pc_expr = memory.from_u64(pc_reg, 32);
+        registers.insert("PC".to_owned(), pc_expr);
+
+        let sp_expr = memory.from_u64(sp_reg, 32);
+        registers.insert("SP".to_owned(), sp_expr);
+
+        GAState {
+            constraints,
+            memory,
+            hooks,
+            state,
+            count_cycles: true,
+            cycle_count: 0,
+            last_instruction: None,
+            last_pc: 0,
+            continue_in_instruction: None,
+            current_instruction: None,
+            instruction_counter: 0,
+            has_jumped: false,
+            instruction_conditions: VecDeque::new(),
+            any_counter: 0,
+            architecture,
+        }
+    }
 
     /// Set a value to a register.
     pub fn set_register(&mut self, register: String, expr: C::SmtExpression) -> Result<()> {
@@ -346,16 +339,16 @@ impl<C: Composition> GAState2<C> {
     }
 
     /// Get the next instruction based on the address in the PC register.
-    pub fn get_next_instruction(&self) -> Result<HookOrInstruction2<'_, C>> {
+    pub fn get_next_instruction(&self) -> Result<HookOrInstruction<'_, C>> {
         let pc = self
             .memory
             .get_pc()
             .map(|val| val.get_constant().ok_or(GAError::NonDeterministicPC))??
             & !(0b1); // Not applicable for all architectures TODO: Fix this.;
         match self.hooks.get_pc_hooks(pc as u32) {
-            ResultOrHook::Hook(hook) => Ok(HookOrInstruction2::PcHook(hook)),
+            ResultOrHook::Hook(hook) => Ok(HookOrInstruction::PcHook(hook)),
             ResultOrHook::Hooks(_) => todo!("Handle multiple hooks on a single address"),
-            ResultOrHook::Result(pc) => Ok(HookOrInstruction2::Instruction(
+            ResultOrHook::Result(pc) => Ok(HookOrInstruction::Instruction(
                 self.instruction_from_array_ptr(
                     self.memory.get_from_instruction_memory(pc as u64)?,
                 )?,
@@ -363,13 +356,13 @@ impl<C: Composition> GAState2<C> {
         }
     }
 
-    fn write_word_from_memory_no_static(
-        &mut self,
-        address: &C::SmtExpression,
-        value: C::SmtExpression,
-    ) -> Result<()> {
-        Ok(self.memory.set(address, value)?)
-    }
+    //fn write_word_from_memory_no_static(
+    //    &mut self,
+    //    address: &C::SmtExpression,
+    //    value: C::SmtExpression,
+    //) -> Result<()> {
+    //    Ok(self.memory.set(address, value)?)
+    //}
 
     /// Read a word form memory. Will respect the endianness of the project.
     pub fn read_word_from_memory(&self, address: &C::SmtExpression) -> Result<C::SmtExpression> {
@@ -382,21 +375,10 @@ impl<C: Composition> GAState2<C> {
         address: &C::SmtExpression,
         value: C::SmtExpression,
     ) -> Result<()> {
-        match address.get_constant() {
-            Some(address_const) => {
-                if self.project.address_in_range(address_const) {
-                    Err(GAError::WritingToStaticMemoryProhibited)
-                } else {
-                    self.write_word_from_memory_no_static(address, value)
-                }
-            }
-
-            // For non constant addresses always read non_static memory
-            None => self.write_word_from_memory_no_static(address, value),
-        }
+        Ok(self.memory.set(address, value)?)
     }
 
-    pub fn instruction_from_array_ptr(&self, data: &[u8]) -> project::Result<Instruction2<C>> {
+    pub fn instruction_from_array_ptr(&self, data: &[u8]) -> project::Result<Instruction<C>> {
         self.architecture
             .translate(data, self)
             .map_err(|el| el.into())

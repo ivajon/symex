@@ -1,6 +1,6 @@
 //! Describes the VM for general assembly
 
-use super::{hooks::HookContainer, state::GAState2, GAExecutor, PathResult};
+use super::{hooks::HookContainer, state::GAState, GAExecutor, PathResult};
 use crate::{
     arch::SupportedArchitecture,
     path_selection::{DFSPathSelection, Path},
@@ -31,7 +31,7 @@ impl<C: Composition> VM<C> {
             paths: DFSPathSelection::new(),
         };
 
-        let mut state = GAState2::<C>::new(
+        let mut state = GAState::<C>::new(
             ctx.clone(),
             ctx.clone(),
             project,
@@ -48,9 +48,24 @@ impl<C: Composition> VM<C> {
         Ok(vm)
     }
 
+    #[cfg(test)]
+    pub(crate) fn new_test_vm(
+        project: <C::Memory as SmtMap>::ProgramMemory,
+        state: GAState<C>,
+    ) -> Result<Self> {
+        let mut vm = Self {
+            project: project.clone(),
+            paths: DFSPathSelection::new(),
+        };
+
+        vm.paths.save_path(Path::new(state, None));
+
+        Ok(vm)
+    }
+
     pub fn new_with_state(
         project: <C::Memory as SmtMap>::ProgramMemory,
-        state: GAState2<C>,
+        state: GAState<C>,
     ) -> Self {
         let mut vm = Self {
             project,
@@ -65,7 +80,7 @@ impl<C: Composition> VM<C> {
     pub fn run(
         &mut self,
         logger: &mut C::Logger,
-    ) -> Result<Option<(PathResult<C>, GAState2<C>, Vec<C::SmtExpression>)>> {
+    ) -> Result<Option<(PathResult<C>, GAState<C>, Vec<C::SmtExpression>)>> {
         if let Some(path) = self.paths.get_path() {
             // try stuff
             let mut executor = GAExecutor::from_state(path.state, self, self.project.clone());

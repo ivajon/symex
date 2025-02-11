@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use hashbrown::HashMap;
 use tracing::{trace, warn};
 
-use super::state::GAState2;
+use super::state::GAState;
 use crate::{
     project::dwarf_helper::SubProgramMap,
     smt::{MemoryError, SmtExpr, SmtMap, SmtSolver},
@@ -11,66 +11,62 @@ use crate::{
     Result,
 };
 
-/// Represents a generic state container.
-pub trait UserStateContainer: Debug + Clone {}
-impl UserStateContainer for () {}
-
 #[derive(Debug, Clone, Copy)]
-pub enum PCHook2<C: Composition> {
+pub enum PCHook<C: Composition> {
     Continue,
     EndSuccess,
     EndFailure(&'static str),
-    Intrinsic(fn(state: &mut GAState2<C>) -> super::Result<()>),
+    Intrinsic(fn(state: &mut GAState<C>) -> super::Result<()>),
     Suppress,
 }
 
 #[derive(Debug, Clone)]
 pub struct HookContainer<C: Composition> {
     register_read_hook:
-        HashMap<String, fn(state: &mut GAState2<C>) -> super::Result<C::SmtExpression>>,
+        HashMap<String, fn(state: &mut GAState<C>) -> super::Result<C::SmtExpression>>,
 
     register_write_hook:
-        HashMap<String, fn(state: &mut GAState2<C>, value: C::SmtExpression) -> super::Result<()>>,
+        HashMap<String, fn(state: &mut GAState<C>, value: C::SmtExpression) -> super::Result<()>>,
 
-    pc_hook: HashMap<u64, PCHook2<C>>,
+    pc_hook: HashMap<u64, PCHook<C>>,
 
     single_memory_read_hook:
-        HashMap<u64, fn(state: &mut GAState2<C>, address: u64) -> super::Result<C::SmtExpression>>,
+        HashMap<u64, fn(state: &mut GAState<C>, address: u64) -> super::Result<C::SmtExpression>>,
 
     single_memory_write_hook: HashMap<
         u64,
-        fn(state: &mut GAState2<C>, value: C::SmtExpression, address: u64) -> super::Result<()>,
+        fn(state: &mut GAState<C>, value: C::SmtExpression, address: u64) -> super::Result<()>,
     >,
 
     // TODO: Replace with a proper range tree implementation.
     range_memory_read_hook: Vec<(
         (u64, u64),
-        fn(state: &mut GAState2<C>, address: u64) -> super::Result<C::SmtExpression>,
+        fn(state: &mut GAState<C>, address: u64) -> super::Result<C::SmtExpression>,
     )>,
 
     range_memory_write_hook: Vec<(
         (u64, u64),
-        fn(state: &mut GAState2<C>, value: C::SmtExpression, address: u64) -> super::Result<()>,
+        fn(state: &mut GAState<C>, value: C::SmtExpression, address: u64) -> super::Result<()>,
     )>,
 }
 
 pub type RegisterReadHook<C> =
-    fn(state: &mut GAState2<C>) -> super::Result<<C as Composition>::SmtExpression>;
+    fn(state: &mut GAState<C>) -> super::Result<<C as Composition>::SmtExpression>;
 pub type RegisterWriteHook<C> =
-    fn(state: &mut GAState2<C>, value: <C as Composition>::SmtExpression) -> super::Result<()>;
+    fn(state: &mut GAState<C>, value: <C as Composition>::SmtExpression) -> super::Result<()>;
 
 pub type MemoryReadHook<C> =
-    fn(state: &mut GAState2<C>, address: u64) -> super::Result<<C as Composition>::SmtExpression>;
+    fn(state: &mut GAState<C>, address: u64) -> super::Result<<C as Composition>::SmtExpression>;
 pub type MemoryWriteHook<C> = fn(
-    state: &mut GAState2<C>,
+    state: &mut GAState<C>,
     value: <C as Composition>::SmtExpression,
     address: u64,
 ) -> super::Result<()>;
 
 pub type MemoryRangeReadHook<C> =
-    fn(state: &mut GAState2<C>, address: u64) -> super::Result<<C as Composition>::SmtExpression>;
+    fn(state: &mut GAState<C>, address: u64) -> super::Result<<C as Composition>::SmtExpression>;
 pub type MemoryRangeWriteHook<C> = fn(
-    state: &mut GAState2<C>,
+    state: &mut GAState<C>,
     value: <C as Composition>::SmtExpression,
     address: u64,
 ) -> super::Result<()>;
@@ -81,7 +77,7 @@ impl<C: Composition> HookContainer<C> {
     /// ## NOTE
     ///
     /// If a hook already exists for this address it will be overwritten.
-    pub fn add_pc_hook(&mut self, pc: u64, value: PCHook2<C>) -> &mut Self {
+    pub fn add_pc_hook(&mut self, pc: u64, value: PCHook<C>) -> &mut Self {
         let _ = self.pc_hook.insert(pc, value);
         self
     }
@@ -163,7 +159,7 @@ impl<C: Composition> HookContainer<C> {
         &mut self,
         map: &SubProgramMap,
         pattern: &'static str,
-        hook: PCHook2<C>,
+        hook: PCHook<C>,
     ) -> Result<()> {
         let program = match map.get_by_regex(pattern) {
             Some(pattern) => pattern,
@@ -224,7 +220,7 @@ impl<C: Composition> HookContainer<C> {
         }
     }
 
-    pub fn get_pc_hooks(&self, value: u32) -> ResultOrHook<u32, &PCHook2<C>> {
+    pub fn get_pc_hooks(&self, value: u32) -> ResultOrHook<u32, &PCHook<C>> {
         if let Some(pchook) = self.pc_hook.get(&(value as u64)) {
             return ResultOrHook::Hook(pchook);
         }
@@ -245,7 +241,7 @@ impl<'a, C: Composition> Reader<'a, C> {
         size: usize,
     ) -> ResultOrHook<
         std::result::Result<C::SmtExpression, MemoryError>,
-        fn(state: &mut GAState2<C>, address: u64) -> Result<C::SmtExpression>,
+        fn(state: &mut GAState<C>, address: u64) -> Result<C::SmtExpression>,
     > {
         let caddr = addr.get_constant();
         if caddr.is_none() {
@@ -284,7 +280,7 @@ impl<'a, C: Composition> Reader<'a, C> {
         id: &String,
     ) -> ResultOrHook<
         std::result::Result<C::SmtExpression, MemoryError>,
-        fn(state: &mut GAState2<C>) -> Result<C::SmtExpression>,
+        fn(state: &mut GAState<C>) -> Result<C::SmtExpression>,
     > {
         if let Some(hook) = self.container.register_read_hook.get(id) {
             return ResultOrHook::Hook(hook.clone());
@@ -306,7 +302,7 @@ impl<'a, C: Composition> Writer<'a, C> {
     ) -> ResultOrHook<
         std::result::Result<(), MemoryError>,
         fn(
-            state: &mut GAState2<C>,
+            state: &mut GAState<C>,
             value: <<C as Composition>::SMT as SmtSolver>::Expression,
             address: u64,
         ) -> Result<()>,
@@ -349,7 +345,7 @@ impl<'a, C: Composition> Writer<'a, C> {
         value: &C::SmtExpression,
     ) -> ResultOrHook<
         std::result::Result<(), MemoryError>,
-        fn(&mut GAState2<C>, <<C as Composition>::SMT as SmtSolver>::Expression) -> Result<()>,
+        fn(&mut GAState<C>, <<C as Composition>::SMT as SmtSolver>::Expression) -> Result<()>,
     > {
         if let Some(hook) = self.container.register_write_hook.get(id) {
             return ResultOrHook::Hook(hook.clone());
@@ -367,7 +363,7 @@ impl<C: Composition> HookContainer<C> {
     pub fn default(map: &SubProgramMap) -> Result<Self> {
         let mut ret = Self::new();
         // intrinsic functions
-        let start_cyclecount = |state: &mut GAState2<C>| {
+        let start_cyclecount = |state: &mut GAState<C>| {
             state.cycle_count = 0;
             trace!("Reset the cycle count (cycle count: {})", state.cycle_count);
 
@@ -376,7 +372,7 @@ impl<C: Composition> HookContainer<C> {
             state.set_register("PC".to_owned(), lr)?;
             Ok(())
         };
-        let end_cyclecount = |state: &mut GAState2<C>| {
+        let end_cyclecount = |state: &mut GAState<C>| {
             // stop counting
             state.count_cycles = false;
             trace!(
@@ -390,36 +386,32 @@ impl<C: Composition> HookContainer<C> {
             Ok(())
         };
 
-        ret.add_pc_hook_regex(map, r"^panic_.*", PCHook2::EndFailure("panic"))?;
+        ret.add_pc_hook_regex(map, r"^panic_.*", PCHook::EndFailure("panic"))?;
         ret.add_pc_hook_regex(
             map,
             r"^panic_cold_explicit$",
-            PCHook2::EndFailure("explicit panic"),
+            PCHook::EndFailure("explicit panic"),
         )?;
-        ret.add_pc_hook_regex(
-            map,
-            r"^unwrap_failed$",
-            PCHook2::EndFailure("unwrap failed"),
-        )?;
+        ret.add_pc_hook_regex(map, r"^unwrap_failed$", PCHook::EndFailure("unwrap failed"))?;
         ret.add_pc_hook_regex(
             map,
             r"^panic_bounds_check$",
-            PCHook2::EndFailure("bounds check failed"),
+            PCHook::EndFailure("bounds check failed"),
         )?;
         ret.add_pc_hook_regex(
             map,
             r"^unreachable_unchecked$",
-            PCHook2::EndFailure("reached a unreachable unchecked call undefined behavior"),
+            PCHook::EndFailure("reached a unreachable unchecked call undefined behavior"),
         )?;
-        ret.add_pc_hook_regex(map, r"^suppress_path$", PCHook2::Suppress)?;
+        ret.add_pc_hook_regex(map, r"^suppress_path$", PCHook::Suppress)?;
         ret.add_pc_hook_regex(
             map,
             r"^start_cyclecount$",
-            PCHook2::Intrinsic(start_cyclecount),
+            PCHook::Intrinsic(start_cyclecount),
         )?;
-        ret.add_pc_hook_regex(map, r"^end_cyclecount$", PCHook2::Intrinsic(end_cyclecount))?;
+        ret.add_pc_hook_regex(map, r"^end_cyclecount$", PCHook::Intrinsic(end_cyclecount))?;
 
-        ret.add_pc_hook(0xfffffffe, PCHook2::EndSuccess);
+        ret.add_pc_hook(0xfffffffe, PCHook::EndSuccess);
         Ok(ret)
     }
 }

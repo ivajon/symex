@@ -1,14 +1,13 @@
 //! General assembly executor
 
-use std::collections::HashMap;
-
 use general_assembly::{
     prelude::{DataWord, Operand, Operation},
     shift::Shift,
 };
-use hooks::PCHook2;
-use instruction::Instruction2;
-use state::{ContinueInsideInstruction2, GAState2, HookOrInstruction2};
+use hashbrown::HashMap;
+use hooks::PCHook;
+use instruction::Instruction;
+use state::{ContinueInsideInstruction, GAState, HookOrInstruction};
 use tracing::{debug, trace};
 use vm::VM;
 
@@ -27,7 +26,7 @@ pub mod vm;
 
 pub struct GAExecutor<'vm, C: Composition> {
     pub vm: &'vm mut VM<C>,
-    pub state: GAState2<C>,
+    pub state: GAState<C>,
     pub project: <C::Memory as SmtMap>::ProgramMemory,
     //current_instruction: Option<Instruction>,
     current_operation_index: usize,
@@ -49,7 +48,7 @@ struct AddWithCarryResult<E: SmtExpr> {
 impl<'vm, C: Composition> GAExecutor<'vm, C> {
     /// Construct an executor from a state.
     pub fn from_state(
-        state: GAState2<C>,
+        state: GAState<C>,
         vm: &'vm mut VM<C>,
         project: <C::Memory as SmtMap>::ProgramMemory,
     ) -> Self {
@@ -73,30 +72,30 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
 
         loop {
             let instruction = match self.state.get_next_instruction()? {
-                HookOrInstruction2::Instruction(v) => v,
-                HookOrInstruction2::PcHook(hook) => match hook {
-                    PCHook2::Continue => {
+                HookOrInstruction::Instruction(v) => v,
+                HookOrInstruction::PcHook(hook) => match hook {
+                    PCHook::Continue => {
                         debug!("Continuing");
                         let lr = self.state.get_register("LR".to_owned()).unwrap();
                         self.state.set_register("PC".to_owned(), lr)?;
                         continue;
                     }
-                    PCHook2::EndSuccess => {
+                    PCHook::EndSuccess => {
                         debug!("Symbolic execution ended successfully");
                         self.state.increment_cycle_count();
                         return Ok(PathResult::Success(None));
                     }
-                    PCHook2::EndFailure(reason) => {
+                    PCHook::EndFailure(reason) => {
                         debug!("Symbolic execution ended unsuccessfully");
                         let data = *reason;
                         self.state.increment_cycle_count();
                         return Ok(PathResult::Failure(data));
                     }
-                    PCHook2::Suppress => {
+                    PCHook::Suppress => {
                         self.state.increment_cycle_count();
                         return Ok(PathResult::Suppress);
                     }
-                    PCHook2::Intrinsic(f) => {
+                    PCHook::Intrinsic(f) => {
                         f(&mut self.state)?;
 
                         // Set last instruction to empty to no count instruction twice
@@ -302,7 +301,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
                             .len()
                             - 1
                     {
-                        self.state.continue_in_instruction = Some(ContinueInsideInstruction2 {
+                        self.state.continue_in_instruction = Some(ContinueInsideInstruction {
                             instruction: self
                                 .state
                                 .current_instruction
@@ -328,7 +327,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
 
     fn continue_executing_instruction(
         &mut self,
-        inst_to_continue: &ContinueInsideInstruction2<C>,
+        inst_to_continue: &ContinueInsideInstruction<C>,
     ) -> Result<()> {
         let mut local = inst_to_continue.local.to_owned();
         self.state.current_instruction = Some(inst_to_continue.instruction.to_owned());
@@ -341,7 +340,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
     }
 
     /// Execute a single instruction.
-    pub(crate) fn execute_instruction(&mut self, i: &Instruction2<C>) -> Result<()> {
+    pub(crate) fn execute_instruction(&mut self, i: &Instruction<C>) -> Result<()> {
         // update last pc
         let new_pc = self.state.get_register("PC".to_owned())?;
         self.state.last_pc = new_pc.get_constant().unwrap();
@@ -624,7 +623,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
                                 .len()
                                 - 1)
                         {
-                            self.state.continue_in_instruction = Some(ContinueInsideInstruction2 {
+                            self.state.continue_in_instruction = Some(ContinueInsideInstruction {
                                 instruction: self
                                     .state
                                     .current_instruction
@@ -961,7 +960,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
 
 fn count_ones<C: Composition>(
     input: &C::SmtExpression,
-    ctx: &GAState2<C>,
+    ctx: &GAState<C>,
     word_size: usize,
 ) -> C::SmtExpression {
     let mut count = ctx.memory.from_u64(0, word_size);
@@ -976,7 +975,7 @@ fn count_ones<C: Composition>(
 
 fn count_zeroes<C: Composition>(
     input: &C::SmtExpression,
-    ctx: &GAState2<C>,
+    ctx: &GAState<C>,
     word_size: usize,
 ) -> C::SmtExpression {
     let input = input.not();
@@ -992,7 +991,7 @@ fn count_zeroes<C: Composition>(
 
 fn count_leading_ones<C: Composition>(
     input: &C::SmtExpression,
-    ctx: &GAState2<C>,
+    ctx: &GAState<C>,
     word_size: usize,
 ) -> C::SmtExpression {
     let mut count = ctx.memory.from_u64(0, word_size);
@@ -1012,7 +1011,7 @@ fn count_leading_ones<C: Composition>(
 
 fn count_leading_zeroes<C: Composition>(
     input: &C::SmtExpression,
-    ctx: &GAState2<C>,
+    ctx: &GAState<C>,
     word_size: usize,
 ) -> C::SmtExpression {
     let input = input.not();
@@ -1054,118 +1053,239 @@ fn add_with_carry<E: SmtExpr>(
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
+
+    use std::u32;
 
     use general_assembly::{
         condition::Condition,
         operand::{DataWord, Operand},
         operation::Operation,
     };
+    use hashbrown::HashMap;
 
     use super::{state::GAState, vm::VM};
     use crate::{
-        arch::arm::v6::ArmV6M,
+        arch::{arm::v6::ArmV6M, Architecture},
+        defaults::boolector::DefaultComposition,
         executor::{
             add_with_carry,
             count_leading_ones,
             count_leading_zeroes,
             count_ones,
             count_zeroes,
+            hooks::HookContainer,
             instruction::{CycleCount, Instruction},
             GAExecutor,
         },
         project::Project,
-        smt::{DContext, DSolver},
+        smt::{
+            smt_boolector::{Boolector, BoolectorExpr},
+            SmtMap,
+            SmtSolver,
+        },
         Endianness,
         WordSize,
     };
 
     #[test]
     fn test_count_ones_concrete() {
-        let ctx = DContext::new();
-        let num1 = ctx.from_u64(1, 32);
-        let num32 = ctx.from_u64(32, 32);
-        let numff = ctx.from_u64(0xff, 32);
-        let result = count_ones(&num1, &ctx, 32);
+        let ctx = Boolector::new();
+        let project = Box::new(Project::manual_project(
+            vec![],
+            0,
+            0,
+            WordSize::Bit32,
+            Endianness::Little,
+            HashMap::new(),
+        ));
+        let project = Box::leak(project);
+        let state = GAState::<DefaultComposition>::create_test_state(
+            project,
+            ctx.clone(),
+            ctx,
+            0,
+            0,
+            HookContainer::new(),
+            (),
+            crate::arch::SupportedArchitecture::Armv6M(ArmV6M::new()),
+        );
+        let num1 = state.memory.from_u64(1, 32);
+        let num32 = state.memory.from_u64(32, 32);
+        let numff = state.memory.from_u64(0xff, 32);
+        let result: BoolectorExpr = count_ones(&num1, &state, 32);
         assert_eq!(result.get_constant().unwrap(), 1);
-        let result = count_ones(&num32, &ctx, 32);
+        let result: BoolectorExpr = count_ones(&num32, &state, 32);
         assert_eq!(result.get_constant().unwrap(), 1);
-        let result = count_ones(&numff, &ctx, 32);
+        let result: BoolectorExpr = count_ones(&numff, &state, 32);
         assert_eq!(result.get_constant().unwrap(), 8);
     }
 
     #[test]
     fn test_count_ones_symbolic() {
-        let ctx = DContext::new();
-        let solver = DSolver::new(&ctx);
+        let ctx = Boolector::new();
+        let project = Box::new(Project::manual_project(
+            vec![],
+            0,
+            0,
+            WordSize::Bit32,
+            Endianness::Little,
+            HashMap::new(),
+        ));
+        let project = Box::leak(project);
+        let state = GAState::<DefaultComposition>::create_test_state(
+            project,
+            ctx.clone(),
+            ctx.clone(),
+            0,
+            0,
+            HookContainer::new(),
+            (),
+            crate::arch::SupportedArchitecture::Armv6M(ArmV6M::new()),
+        );
         let any_u32 = ctx.unconstrained(32, "any1");
         let num_0x100 = ctx.from_u64(0x100, 32);
         let num_8 = ctx.from_u64(8, 32);
-        solver.assert(&any_u32.ult(&num_0x100));
-        let result = count_ones(&any_u32, &ctx, 32);
+        ctx.assert(&any_u32.ult(&num_0x100));
+        let result = count_ones(&any_u32, &state, 32);
         let result_below_or_equal_8 = result.ulte(&num_8);
         let result_above_8 = result.ugt(&num_8);
-        let can_be_below_or_equal_8 = solver
+        let can_be_below_or_equal_8 = ctx
             .is_sat_with_constraint(&result_below_or_equal_8)
             .unwrap();
-        let can_be_above_8 = solver.is_sat_with_constraint(&result_above_8).unwrap();
+        let can_be_above_8 = ctx.is_sat_with_constraint(&result_above_8).unwrap();
         assert!(can_be_below_or_equal_8);
         assert!(!can_be_above_8);
     }
 
     #[test]
     fn test_count_zeroes_concrete() {
-        let ctx = DContext::new();
-        let num1 = ctx.from_u64(!1, 32);
-        let num32 = ctx.from_u64(!32, 32);
-        let numff = ctx.from_u64(!0xff, 32);
-        let result = count_zeroes(&num1, &ctx, 32);
+        let ctx = Boolector::new();
+        let project = Box::new(Project::manual_project(
+            vec![],
+            0,
+            0,
+            WordSize::Bit32,
+            Endianness::Little,
+            HashMap::new(),
+        ));
+        let project = Box::leak(project);
+        let state = GAState::<DefaultComposition>::create_test_state(
+            project,
+            ctx.clone(),
+            ctx.clone(),
+            0,
+            0,
+            HookContainer::new(),
+            (),
+            crate::arch::SupportedArchitecture::Armv6M(ArmV6M::new()),
+        );
+        let num1 = state.memory.from_u64(!1, 32);
+        let num32 = state.memory.from_u64(!32, 32);
+        let numff = state.memory.from_u64(!0xff, 32);
+        let result = count_zeroes(&num1, &state, 32);
         assert_eq!(result.get_constant().unwrap(), 1);
-        let result = count_zeroes(&num32, &ctx, 32);
+        let result = count_zeroes(&num32, &state, 32);
         assert_eq!(result.get_constant().unwrap(), 1);
-        let result = count_zeroes(&numff, &ctx, 32);
+        let result = count_zeroes(&numff, &state, 32);
         assert_eq!(result.get_constant().unwrap(), 8);
     }
 
     #[test]
     fn test_count_leading_ones_concrete() {
-        let ctx = DContext::new();
-        let input = ctx.from_u64(0b1000_0000, 8);
-        let result = count_leading_ones(&input, &ctx, 8);
+        let ctx = Boolector::new();
+        let project = Box::new(Project::manual_project(
+            vec![],
+            0,
+            0,
+            WordSize::Bit32,
+            Endianness::Little,
+            HashMap::new(),
+        ));
+        let project = Box::leak(project);
+        let state = GAState::<DefaultComposition>::create_test_state(
+            project,
+            ctx.clone(),
+            ctx.clone(),
+            0,
+            0,
+            HookContainer::new(),
+            (),
+            crate::arch::SupportedArchitecture::Armv6M(ArmV6M::new()),
+        );
+        let input = state.memory.from_u64(0b1000_0000, 8);
+        let result = count_leading_ones(&input, &state, 8);
         assert_eq!(result.get_constant().unwrap(), 1);
-        let input = ctx.from_u64(0b1100_0000, 8);
-        let result = count_leading_ones(&input, &ctx, 8);
+        let input = state.memory.from_u64(0b1100_0000, 8);
+        let result = count_leading_ones(&input, &state, 8);
         assert_eq!(result.get_constant().unwrap(), 2);
-        let input = ctx.from_u64(0b1110_0011, 8);
-        let result = count_leading_ones(&input, &ctx, 8);
+        let input = state.memory.from_u64(0b1110_0011, 8);
+        let result = count_leading_ones(&input, &state, 8);
         assert_eq!(result.get_constant().unwrap(), 3);
     }
 
     #[test]
     fn test_count_leading_zeroes_concrete() {
-        let ctx = DContext::new();
-        let input = ctx.from_u64(!0b1000_0000, 8);
-        let result = count_leading_zeroes(&input, &ctx, 8);
+        let ctx = Boolector::new();
+        let project = Box::new(Project::manual_project(
+            vec![],
+            0,
+            0,
+            WordSize::Bit32,
+            Endianness::Little,
+            HashMap::new(),
+        ));
+        let project = Box::leak(project);
+        let state = GAState::<DefaultComposition>::create_test_state(
+            project,
+            ctx.clone(),
+            ctx.clone(),
+            0,
+            0,
+            HookContainer::new(),
+            (),
+            crate::arch::SupportedArchitecture::Armv6M(ArmV6M::new()),
+        );
+        let input = state.memory.from_u64(!0b1000_0000, 8);
+        let result = count_leading_zeroes(&input, &state, 8);
         assert_eq!(result.get_constant().unwrap(), 1);
-        let input = ctx.from_u64(!0b1100_0000, 8);
-        let result = count_leading_zeroes(&input, &ctx, 8);
+        let input = state.memory.from_u64(!0b1100_0000, 8);
+        let result = count_leading_zeroes(&input, &state, 8);
         assert_eq!(result.get_constant().unwrap(), 2);
-        let input = ctx.from_u64(!0b1110_0011, 8);
-        let result = count_leading_zeroes(&input, &ctx, 8);
+        let input = state.memory.from_u64(!0b1110_0011, 8);
+        let result = count_leading_zeroes(&input, &state, 8);
         assert_eq!(result.get_constant().unwrap(), 3);
     }
 
     #[test]
     fn test_add_with_carry() {
-        let ctx = DContext::new();
-        let one_bool = ctx.from_bool(true);
-        let zero_bool = ctx.from_bool(false);
-        let zero = ctx.from_u64(0, 32);
-        let num42 = ctx.from_u64(42, 32);
-        let num16 = ctx.from_u64(16, 32);
-        let umax = ctx.from_u64(u32::MAX as u64, 32);
-        let smin = ctx.from_u64(i32::MIN as u64, 32);
-        let smax = ctx.from_u64(i32::MAX as u64, 32);
+        let ctx = Boolector::new();
+        let project = Box::new(Project::manual_project(
+            vec![],
+            0,
+            0,
+            WordSize::Bit32,
+            Endianness::Little,
+            HashMap::new(),
+        ));
+        let project = Box::leak(project);
+        let state = GAState::<DefaultComposition>::create_test_state(
+            project,
+            ctx.clone(),
+            ctx.clone(),
+            0,
+            0,
+            HookContainer::new(),
+            (),
+            crate::arch::SupportedArchitecture::Armv6M(ArmV6M::new()),
+        );
+        let one_bool = state.memory.from_bool(true);
+        let zero_bool = state.memory.from_bool(false);
+        let zero = state.memory.from_u64(0, 32);
+        let num42 = state.memory.from_u64(42, 32);
+        let num16 = state.memory.from_u64(16, 32);
+        let umax = state.memory.from_u64(u32::MAX as u64, 32);
+        let smin = state.memory.from_u64(i32::MIN as u64, 32);
+        let smax = state.memory.from_u64(i32::MAX as u64, 32);
 
         // simple add
         let result = add_with_carry(&num42, &num16, &zero_bool, 32);
@@ -1219,31 +1339,28 @@ mod test {
         assert!(!result.overflow.get_constant_bool().unwrap());
     }
 
-    fn setup_test_vm() -> VM<ArmV6M> {
-        // create an empty project
-        let project = Box::new(Project::manual_project(
+    fn setup_test_vm() -> VM<DefaultComposition> {
+        let ctx = Boolector::new();
+        let project_global = Box::new(Project::manual_project(
             vec![],
             0,
             0,
             WordSize::Bit32,
             Endianness::Little,
             HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            vec![],
-            HashMap::new(),
-            vec![],
         ));
-        let project = Box::leak(project);
-        let context = Box::new(DContext::new());
-        let context = Box::leak(context);
-        let solver = DSolver::new(context);
-        let state =
-            GAState::create_test_state(project, context, solver, 0, u32::MAX as u64, ArmV6M {});
-        let vm = VM::new_with_state(project, state);
-        vm
+        let project: &'static Project = Box::leak(project_global);
+        let state = GAState::<DefaultComposition>::create_test_state(
+            project,
+            ctx.clone(),
+            ctx.clone(),
+            0,
+            0,
+            HookContainer::new(),
+            (),
+            crate::arch::SupportedArchitecture::Armv6M(ArmV6M::new()),
+        );
+        VM::new_test_vm(project, state).unwrap()
     }
 
     #[test]
@@ -1407,11 +1524,14 @@ mod test {
         let imm_umax = Operand::Immediate(DataWord::Word32(u32::MAX));
         let r0 = Operand::Register("R0".to_owned());
 
-        let true_dexpr = executor.state.ctx.from_bool(true);
-        let false_dexpr = executor.state.ctx.from_bool(false);
+        let true_dexpr = executor.state.memory.from_bool(true);
+        let false_dexpr = executor.state.memory.from_bool(false);
 
         // test normal add
-        executor.state.set_flag("C".to_owned(), false_dexpr.clone());
+        executor
+            .state
+            .set_flag("C".to_owned(), false_dexpr.clone())
+            .unwrap();
         let operation = Operation::Adc {
             destination: r0.clone(),
             operand1: imm_42.clone(),
@@ -1428,7 +1548,10 @@ mod test {
         assert_eq!(result, 54);
 
         // test add with overflow
-        executor.state.set_flag("C".to_owned(), false_dexpr.clone());
+        executor
+            .state
+            .set_flag("C".to_owned(), false_dexpr.clone())
+            .unwrap();
         let operation = Operation::Adc {
             destination: r0.clone(),
             operand1: imm_umax.clone(),
@@ -1445,7 +1568,10 @@ mod test {
         assert_eq!(result, 11);
 
         // test add with carry in
-        executor.state.set_flag("C".to_owned(), true_dexpr.clone());
+        executor
+            .state
+            .set_flag("C".to_owned(), true_dexpr.clone())
+            .unwrap();
         let operation = Operation::Adc {
             destination: r0.clone(),
             operand1: imm_42.clone(),

@@ -16,7 +16,7 @@ use arm::{v6::ArmV6M, v7::ArmV7EM};
 use thiserror::Error;
 
 use crate::{
-    executor::{hooks::HookContainer, instruction::Instruction2, state::GAState2},
+    executor::{hooks::HookContainer, instruction::Instruction, state::GAState},
     project::dwarf_helper::SubProgramMap,
     Composition,
 };
@@ -106,8 +106,8 @@ pub trait Architecture: Debug + Display + Into<SupportedArchitecture> {
     fn translate<C: Composition>(
         &self,
         buff: &[u8],
-        state: &GAState2<C>,
-    ) -> Result<Instruction2<C>, ArchError>;
+        state: &GAState<C>,
+    ) -> Result<Instruction<C>, ArchError>;
 
     /// Adds the architecture specific hooks to the [`RunConfig`]
     fn add_hooks<C: Composition>(
@@ -127,8 +127,8 @@ impl SupportedArchitecture {
     pub fn translate<C: Composition>(
         &self,
         buff: &[u8],
-        state: &GAState2<C>,
-    ) -> Result<Instruction2<C>, ArchError> {
+        state: &GAState<C>,
+    ) -> Result<Instruction<C>, ArchError> {
         match self {
             Self::Armv6M(a) => a.translate(buff, state),
             Self::Armv7EM(a) => a.translate(buff, state),

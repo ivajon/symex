@@ -24,7 +24,6 @@
 use std::fmt::Debug;
 
 use arch::ArchError;
-use executor::hooks::UserStateContainer;
 use logging::Logger;
 use memory::MemoryError;
 use project::ProjectError;
@@ -32,7 +31,6 @@ use smt::{SmtExpr, SmtMap, SmtSolver, SolverError};
 
 pub mod arch;
 pub mod defaults;
-//pub mod elf_util;
 pub mod executor;
 pub mod initiation;
 pub mod logging;
@@ -40,7 +38,6 @@ pub mod manager;
 pub mod memory;
 pub mod path_selection;
 pub mod project;
-//pub mod run_elf;
 pub mod smt;
 
 pub type Result<T> = std::result::Result<T, GAError>;
@@ -58,6 +55,11 @@ pub trait Composition: Clone + Debug {
 
     fn logger<'a>() -> &'a mut Self::Logger;
 }
+
+/// Represents a generic state container.
+pub trait UserStateContainer: Debug + Clone {}
+impl UserStateContainer for () {}
+impl<A: Debug + Clone + ?Sized> UserStateContainer for Box<A> {}
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum GAError {

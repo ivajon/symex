@@ -1,7 +1,7 @@
 use std::hash::Hash;
 
 use crate::{
-    executor::{state::GAState2, PathResult},
+    executor::{state::GAState, PathResult},
     manager::SymexArbiter,
     Composition,
 };
@@ -55,7 +55,7 @@ pub trait Logger {
     fn record_path_result<C: Composition>(&mut self, path_result: PathResult<C>);
 
     /// Records the final state of the current path.
-    fn record_final_state<C: Composition>(&mut self, state: GAState2<C>);
+    fn record_final_state<C: Composition>(&mut self, state: GAState<C>);
 
     /// Changes to a new path in the executor.
     ///
@@ -102,7 +102,7 @@ impl Logger for NoLogger {
         None
     }
 
-    fn record_final_state<C: Composition>(&mut self, _state: GAState2<C>) {}
+    fn record_final_state<C: Composition>(&mut self, _state: GAState<C>) {}
 
     fn register_region(&mut self, _region: Self::RegionIdentifier) {}
 

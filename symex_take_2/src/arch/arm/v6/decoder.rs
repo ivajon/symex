@@ -13,7 +13,7 @@ use general_assembly::{
 };
 
 use super::ArmV6M;
-use crate::executor::instruction::Instruction2 as GAInstruction;
+use crate::executor::instruction::Instruction as GAInstruction;
 
 impl ArmV6M {
     pub(super) fn expand<C: crate::Composition>(instr: Instruction) -> GAInstruction<C> {

@@ -1,11 +1,11 @@
-use crate::{executor::state::GAState2, smt::SmtSolver, Composition};
+use crate::{executor::state::GAState, smt::SmtSolver, Composition};
 
 #[derive(Debug, Clone)]
 pub struct Path<C: Composition> {
     /// The state to use when resuming execution.
     ///
     /// The location in the state should be where to resume execution at.
-    pub state: GAState2<C>,
+    pub state: GAState<C>,
 
     /// Constraints to add before starting execution on this path.
     pub constraints: Vec<<C::SMT as SmtSolver>::Expression>,
@@ -14,7 +14,7 @@ pub struct Path<C: Composition> {
 impl<C: Composition> Path<C> {
     /// Creates a new path starting at a certain state, optionally asserting a
     /// condition on the created path.
-    pub fn new(state: GAState2<C>, constraint: Option<<C::SMT as SmtSolver>::Expression>) -> Self {
+    pub fn new(state: GAState<C>, constraint: Option<<C::SMT as SmtSolver>::Expression>) -> Self {
         let constraints = match constraint {
             Some(c) => vec![c],
             None => vec![],

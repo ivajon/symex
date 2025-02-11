@@ -9,13 +9,14 @@ use tracing::debug;
 use crate::{
     arch::SupportedArchitecture,
     defaults::boolector::UserState,
-    executor::hooks::{HookContainer, PCHook2, UserStateContainer},
+    executor::hooks::{HookContainer, PCHook},
     logging::NoLogger,
     manager::SymexArbiter,
     project::{dwarf_helper::SubProgramMap, Project, ProjectError},
     smt::{SmtMap, SmtSolver},
     Composition,
     Endianness,
+    UserStateContainer,
 };
 
 //pub mod run_config;
@@ -242,13 +243,9 @@ impl Display for NoArchOverride {
             .unwrap();
 
         let _res = symex.add_hooks(|hook_container, lookup| {
-            hook_container.add_pc_hook(0x1234, PCHook2::Continue);
+            hook_container.add_pc_hook(0x1234, PCHook::Continue);
             hook_container
-                .add_pc_hook_regex(
-                    lookup,
-                    r"some_function",
-                    PCHook2::Intrinsic(|_state| Ok(())),
-                )
+                .add_pc_hook_regex(lookup, r"some_function", PCHook::Intrinsic(|_state| Ok(())))
                 .expect("Initiation failed!");
 
             // Get the stack pointer writes.

@@ -8,9 +8,9 @@ use tracing::trace;
 use crate::{
     arch::{ArchError, Architecture, ParseError, SupportedArchitecture},
     executor::{
-        hooks::{HookContainer, PCHook2},
-        instruction::Instruction2,
-        state::GAState2,
+        hooks::{HookContainer, PCHook},
+        instruction::Instruction,
+        state::GAState,
     },
     project::dwarf_helper::SubProgramMap,
     smt::{SmtExpr, SmtMap},
@@ -19,8 +19,8 @@ use crate::{
 #[rustfmt::skip]
 pub mod decoder;
 pub mod compare;
-//#[cfg(test)]
-//pub mod test;
+#[cfg(test)]
+pub mod test;
 pub mod timing;
 
 /// Type level denotation for the ARMV7-EM ISA.
@@ -33,7 +33,7 @@ impl Architecture for ArmV7EM {
         cfg: &mut HookContainer<C>,
         map: &mut SubProgramMap,
     ) {
-        let symbolic_sized = |state: &mut GAState2<C>| {
+        let symbolic_sized = |state: &mut GAState<C>| {
             let value_ptr = state.memory.get_register("R0")?;
             let size = state.memory.get_register("R1")?.get_constant().unwrap() * 8;
             let name = state.label_new_symbolic("any");
@@ -55,7 +55,7 @@ impl Architecture for ArmV7EM {
         cfg.add_pc_hook_regex(
             map,
             r"^symbolic_size<.+>$",
-            PCHook2::Intrinsic(symbolic_sized),
+            PCHook::Intrinsic(symbolic_sized),
         )
         .expect("Could not add symbolic hook in v7");
         // §B1.4 Specifies that R[15] => Addr(Current instruction) + 4
@@ -67,7 +67,7 @@ impl Architecture for ArmV7EM {
         //
         //
         // Or we can simply take the previous PC + 4.
-        let read_pc = |state: &mut GAState2<C>| {
+        let read_pc = |state: &mut GAState<C>| {
             let new_pc = state
                 .memory
                 .from_u64(state.last_pc + 4, state.memory.get_word_size())
@@ -75,15 +75,15 @@ impl Architecture for ArmV7EM {
             Ok(new_pc)
         };
 
-        let read_sp = |state: &mut GAState2<C>| {
+        let read_sp = |state: &mut GAState<C>| {
             let two = state.memory.from_u64((!(0b11u32)) as u64, 32);
             let sp = state.get_register("SP".to_owned()).unwrap();
             let sp = sp.simplify();
             Ok(sp.and(&two))
         };
 
-        let write_pc = |state: &mut GAState2<C>, value| state.set_register("PC".to_owned(), value);
-        let write_sp = |state: &mut GAState2<C>, value: C::SmtExpression| {
+        let write_pc = |state: &mut GAState<C>, value| state.set_register("PC".to_owned(), value);
+        let write_sp = |state: &mut GAState<C>, value: C::SmtExpression| {
             state.set_register(
                 "SP".to_string(),
                 value.and(&state.memory.from_u64((!(0b11u32)) as u64, 32)),
@@ -99,7 +99,7 @@ impl Architecture for ArmV7EM {
         cfg.add_register_write_hook("SP&".to_owned(), write_sp);
 
         // reset always done
-        let read_reset_done = |state: &mut GAState2<C>, _addr| {
+        let read_reset_done = |state: &mut GAState<C>, _addr| {
             let value = state.memory.from_u64(0xffff_ffff, 32);
             Ok(value)
         };
@@ -109,8 +109,8 @@ impl Architecture for ArmV7EM {
     fn translate<C: crate::Composition>(
         &self,
         buff: &[u8],
-        state: &GAState2<C>,
-    ) -> Result<Instruction2<C>, ArchError> {
+        state: &GAState<C>,
+    ) -> Result<Instruction<C>, ArchError> {
         let mut buff: disarmv7::buffer::PeekableBuffer<u8, _> = buff.iter().cloned().into();
 
         let instr = V7Operation::parse(&mut buff).map_err(|e| ArchError::ParsingError(e.into()))?;
@@ -118,7 +118,7 @@ impl Architecture for ArmV7EM {
         let timing = Self::cycle_count_m4_core(&instr.1);
         let ops: Vec<Operation> = instr.clone().convert(state.get_in_conditional_block());
 
-        Ok(Instruction2 {
+        Ok(Instruction {
             instruction_size: instr.0 as u32,
             operations: ops,
             max_cycle: timing,

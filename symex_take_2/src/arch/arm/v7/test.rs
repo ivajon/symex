@@ -1,22 +1,23 @@
-use std::collections::HashMap;
-
 use disarmv7::prelude::{operation::*, *};
 use general_assembly::{
     operand::{DataWord, Operand},
     operation::Operation as GAOperation,
 };
+use hashbrown::HashMap;
 
 use super::ArmV7EM;
 use crate::{
-    arch::arm::v7::decoder::*,
+    arch::{arm::v7::decoder::*, Architecture},
+    defaults::boolector::DefaultComposition,
     executor::{
+        hooks::HookContainer,
         instruction::{CycleCount, Instruction},
         state::GAState,
         vm::VM,
         GAExecutor,
     },
-    project::Project,
-    smt::{DContext, DSolver},
+    project::{dwarf_helper::SubProgramMap, Project},
+    smt::{smt_boolector::Boolector, SmtSolver},
     Endianness,
     WordSize,
 };
@@ -112,7 +113,7 @@ macro_rules! test {
     };
 }
 
-/// This can be miss used but will fail at compile time if not correctly
+/// This can be misused but will fail at compile time if not correctly
 /// structured.
 macro_rules! initiate {
     ($exec:ident {
@@ -152,33 +153,30 @@ macro_rules! initiate {
     };
 }
 
-fn setup_test_vm() -> VM<ArmV7EM> {
-    // create an empty project
-    let mut project = Box::new(Project::manual_project(
+fn setup_test_vm() -> VM<DefaultComposition> {
+    let ctx = Boolector::new();
+    let project_global = Box::new(Project::manual_project(
         vec![],
         0,
         0,
         WordSize::Bit32,
         Endianness::Little,
         HashMap::new(),
-        HashMap::new(),
-        HashMap::new(),
-        HashMap::new(),
-        HashMap::new(),
-        vec![],
-        HashMap::new(),
-        vec![],
     ));
-    let mut arch = ArmV7EM::default();
-    project.add_hooks(&mut arch);
-
-    let project = Box::leak(project);
-    let context = Box::new(DContext::new());
-    let context = Box::leak(context);
-    let solver = DSolver::new(context);
-    let state = GAState::create_test_state(project, context, solver, 0, u32::MAX as u64, arch);
-    let vm = VM::new_with_state(project, state);
-    vm
+    let project: &'static Project = Box::leak(project_global);
+    let mut hooks = HookContainer::new();
+    ArmV7EM {}.add_hooks(&mut hooks, &mut SubProgramMap::empty());
+    let state = GAState::<DefaultComposition>::create_test_state(
+        project,
+        ctx.clone(),
+        ctx.clone(),
+        0,
+        0,
+        hooks,
+        (),
+        crate::arch::SupportedArchitecture::Armv7EM(ArmV7EM::new()),
+    );
+    VM::new_test_vm(project, state).unwrap()
 }
 
 #[test]

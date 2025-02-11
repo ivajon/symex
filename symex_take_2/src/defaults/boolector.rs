@@ -2,13 +2,12 @@ use std::marker::PhantomData;
 
 use super::logger::SimpleLogger;
 use crate::{
-    arch::Architecture,
-    executor::hooks::UserStateContainer,
     logging::NoLogger,
     manager::SymexArbiter,
     memory::array_memory::BoolectorMemory,
     smt::smt_boolector::{Boolector, BoolectorExpr},
     Composition,
+    UserStateContainer,
 };
 
 pub type Symex = SymexArbiter<DefaultComposition>;
@@ -29,8 +28,6 @@ impl Composition for DefaultComposition {
         todo!()
     }
 }
-
-impl<A: Architecture + ?Sized> UserStateContainer for Box<A> where Box<A>: Clone {}
 
 #[derive(Clone, Debug)]
 pub struct UserState<State: UserStateContainer> {

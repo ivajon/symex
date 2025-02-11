@@ -43,6 +43,16 @@ impl SubProgramMap {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn empty() -> Self {
+        Self {
+            index_1: HashMap::new(),
+            index_2: HashMap::new(),
+            map: HashMap::new(),
+            counter: 0,
+        }
+    }
+
     fn insert(&mut self, name: String, address: u64, value: SubProgram) {
         let _ = self.index_1.insert(name, self.counter);
         let _ = self.index_2.insert(address, self.counter);

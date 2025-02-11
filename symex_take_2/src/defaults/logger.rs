@@ -140,7 +140,7 @@ impl Logger for SimpleLogger {
 
     fn record_final_state<C: crate::Composition>(
         &mut self,
-        state: crate::executor::state::GAState2<C>,
+        state: crate::executor::state::GAState<C>,
     ) {
         let memory = state.memory;
 

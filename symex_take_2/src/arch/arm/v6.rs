@@ -7,7 +7,7 @@ use tracing::trace;
 
 use crate::{
     arch::{ArchError, Architecture, ParseError, SupportedArchitecture},
-    executor::{hooks::PCHook2, state::GAState2},
+    executor::{hooks::PCHook, state::GAState},
     smt::{SmtExpr, SmtMap},
 };
 
@@ -25,7 +25,7 @@ impl Architecture for ArmV6M {
         cfg: &mut crate::executor::hooks::HookContainer<C>,
         map: &mut crate::project::dwarf_helper::SubProgramMap,
     ) {
-        let symbolic_sized = |state: &mut GAState2<_>| {
+        let symbolic_sized = |state: &mut GAState<_>| {
             let value_ptr = state.get_register("R0".to_owned())?;
             let size_expr: C::SmtExpression = state.get_register("R1".to_owned())?;
             let size: u64 = size_expr.get_constant().unwrap() * 8;
@@ -52,17 +52,17 @@ impl Architecture for ArmV6M {
         cfg.add_pc_hook_regex(
             &map,
             r"^symbolic_size<.+>$",
-            PCHook2::Intrinsic(symbolic_sized),
+            PCHook::Intrinsic(symbolic_sized),
         )
         .expect("Symbol not found in symtab");
 
-        let read_pc = |state: &mut GAState2<C>| {
+        let read_pc = |state: &mut GAState<C>| {
             let two = state.memory.from_u64(1, 32);
             let pc = state.get_register("PC".to_owned()).unwrap();
             Ok(pc.add(&two))
         };
 
-        let write_pc = |state: &mut GAState2<C>, value: C::SmtExpression| {
+        let write_pc = |state: &mut GAState<C>, value: C::SmtExpression| {
             state.set_register("PC".to_owned(), value)
         };
 
@@ -70,7 +70,7 @@ impl Architecture for ArmV6M {
         cfg.add_register_write_hook("PC+".to_owned(), write_pc);
 
         // reset always done
-        let read_reset_done = |state: &mut GAState2<C>, _addr| {
+        let read_reset_done = |state: &mut GAState<C>, _addr| {
             let value = state.memory.from_u64(0xffff_ffff, 32);
             Ok(value)
         };
@@ -80,8 +80,8 @@ impl Architecture for ArmV6M {
     fn translate<C: crate::Composition>(
         &self,
         buff: &[u8],
-        _state: &GAState2<C>,
-    ) -> Result<crate::executor::instruction::Instruction2<C>, ArchError> {
+        _state: &GAState<C>,
+    ) -> Result<crate::executor::instruction::Instruction<C>, ArchError> {
         let ret = armv6_m_instruction_parser::parse(buff).map_err(map_err)?;
         let to_exec = Self::expand(ret);
         Ok(to_exec)
