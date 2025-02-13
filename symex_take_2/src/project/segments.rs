@@ -1,7 +1,8 @@
 //! A loader that can load all segments from a elf file properly.
 
 use object::{read::elf::ProgramHeader, File, Object};
-use tracing::warn;
+
+use crate::warn;
 pub struct Segment {
     data: Vec<u8>,
     start_address: u64,

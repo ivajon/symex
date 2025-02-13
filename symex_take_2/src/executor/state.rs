@@ -4,7 +4,6 @@ use std::collections::VecDeque;
 
 use general_assembly::prelude::Condition;
 use hashbrown::HashMap;
-use tracing::{debug, trace};
 
 use super::{
     hooks::{HookContainer, PCHook, Reader, ResultOrHook, Writer},
@@ -12,8 +11,10 @@ use super::{
 };
 use crate::{
     arch::{SupportedArchitecture, TryAsMut},
+    debug,
     project::{self, ProjectError},
     smt::{ProgramMemory, SmtExpr, SmtMap, SmtSolver},
+    trace,
     Composition,
     GAError,
     Result,

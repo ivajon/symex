@@ -14,7 +14,8 @@ use gimli::{
 };
 use hashbrown::HashMap;
 use regex::Regex;
-use tracing::trace;
+
+use crate::trace;
 
 #[derive(Clone, Debug, Hash)]
 pub struct SubProgram {

@@ -14,12 +14,12 @@ use std::fmt::Display;
 
 use general_assembly::prelude::DataWord;
 use hashbrown::HashMap;
-use tracing::trace;
 
 use super::{MemoryError, BITS_IN_BYTE};
 use crate::{
     project::Project,
     smt::{smt_boolector::Boolector, DArray, DContext, DExpr, ProgramMemory, SmtMap},
+    trace,
     Endianness,
 };
 

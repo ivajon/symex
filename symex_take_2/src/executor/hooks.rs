@@ -1,12 +1,13 @@
 use std::fmt::Debug;
 
 use hashbrown::HashMap;
-use tracing::{trace, warn};
 
 use super::state::GAState;
 use crate::{
     project::dwarf_helper::SubProgramMap,
     smt::{MemoryError, SmtExpr, SmtMap, SmtSolver},
+    trace,
+    warn,
     Composition,
     Result,
 };

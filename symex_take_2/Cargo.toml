@@ -37,3 +37,9 @@ fst = "0.4.7"
 regex-automata = { version = "0.1.9", features = ["transducer"] }
 dyn-clone = "1.0.18"
 
+bitwuzla = {path = "../../bitwuzla-rs/"}#git = "https://github.com/Mrmaxmeier/bitwuzla-rs.git"}
+
+[features]
+default=[]
+
+log=[]

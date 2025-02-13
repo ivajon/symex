@@ -8,13 +8,14 @@ use hashbrown::HashMap;
 use hooks::PCHook;
 use instruction::Instruction;
 use state::{ContinueInsideInstruction, GAState, HookOrInstruction};
-use tracing::{debug, trace};
 use vm::VM;
 
 use crate::{
+    debug,
     logging::Logger,
     path_selection::Path,
     smt::{ProgramMemory, SmtExpr, SmtMap, SmtSolver, SolverError},
+    trace,
     Composition,
     Result,
 };
@@ -39,10 +40,10 @@ pub enum PathResult<C: Composition> {
     Suppress,
 }
 
-struct AddWithCarryResult<E: SmtExpr> {
-    carry_out: E,
-    overflow: E,
-    result: E,
+pub(crate) struct AddWithCarryResult<E: SmtExpr> {
+    pub(crate) carry_out: E,
+    pub(crate) overflow: E,
+    pub(crate) result: E,
 }
 
 impl<'vm, C: Composition> GAExecutor<'vm, C> {
@@ -127,7 +128,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
     }
 
     /// Creates smt expression from a dataword.
-    fn get_dexpr_from_dataword(&mut self, data: DataWord) -> C::SmtExpression {
+    pub(crate) fn get_dexpr_from_dataword(&mut self, data: DataWord) -> C::SmtExpression {
         match data {
             DataWord::Word64(v) => self.state.memory.from_u64(v, 64),
             DataWord::Word32(v) => self.state.memory.from_u64(v as u64, 32),
@@ -271,6 +272,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
         match &address.get_constant() {
             Some(addr) => Ok(*addr),
             None => {
+                debug!("Address {:?} non deterministic!", address);
                 // Find all possible addresses
                 let addresses = self.state.constraints.get_values(&address, 255)?;
 
@@ -401,7 +403,11 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
         operation: &Operation,
         local: &mut HashMap<String, C::SmtExpression>,
     ) -> Result<()> {
-        trace!("Executing operation: {:?}", operation);
+        debug!(
+            "PC: {} -> Executing operation: {:?}",
+            self.state.memory.get_pc().unwrap().to_binary_string(),
+            operation
+        );
         match operation {
             Operation::Nop => (), // nop so do nothing
             Operation::Move {
@@ -705,6 +711,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
                     (true, false) => {
                         let lhs = op1;
                         let rhs = op2.not();
+                        trace!("SetCFlag: computatins done, add_with_cary next");
                         add_with_carry(&lhs, &rhs, &one, self.project.get_word_size()).carry_out
                     }
                     (false, true) => {
@@ -958,7 +965,7 @@ impl<'vm, C: Composition> GAExecutor<'vm, C> {
     }
 }
 
-fn count_ones<C: Composition>(
+pub(crate) fn count_ones<C: Composition>(
     input: &C::SmtExpression,
     ctx: &GAState<C>,
     word_size: usize,
@@ -973,7 +980,7 @@ fn count_ones<C: Composition>(
     count
 }
 
-fn count_zeroes<C: Composition>(
+pub(crate) fn count_zeroes<C: Composition>(
     input: &C::SmtExpression,
     ctx: &GAState<C>,
     word_size: usize,
@@ -989,7 +996,7 @@ fn count_zeroes<C: Composition>(
     count
 }
 
-fn count_leading_ones<C: Composition>(
+pub(crate) fn count_leading_ones<C: Composition>(
     input: &C::SmtExpression,
     ctx: &GAState<C>,
     word_size: usize,
@@ -1009,7 +1016,7 @@ fn count_leading_ones<C: Composition>(
     count
 }
 
-fn count_leading_zeroes<C: Composition>(
+pub(crate) fn count_leading_zeroes<C: Composition>(
     input: &C::SmtExpression,
     ctx: &GAState<C>,
     word_size: usize,
@@ -1032,7 +1039,7 @@ fn count_leading_zeroes<C: Composition>(
 
 /// Does an add with carry and returns result, carry out and overflow like a
 /// hardware adder.
-fn add_with_carry<E: SmtExpr>(
+pub(crate) fn add_with_carry<E: SmtExpr>(
     op1: &E,
     op2: &E,
     carry_in: &E,

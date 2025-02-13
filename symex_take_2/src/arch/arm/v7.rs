@@ -3,10 +3,10 @@ use std::fmt::Display;
 use decoder::Convert;
 use disarmv7::prelude::{Operation as V7Operation, *};
 use general_assembly::operation::Operation;
-use tracing::trace;
 
 use crate::{
     arch::{ArchError, Architecture, ParseError, SupportedArchitecture},
+    debug,
     executor::{
         hooks::{HookContainer, PCHook},
         instruction::Instruction,
@@ -114,7 +114,7 @@ impl Architecture for ArmV7EM {
         let mut buff: disarmv7::buffer::PeekableBuffer<u8, _> = buff.iter().cloned().into();
 
         let instr = V7Operation::parse(&mut buff).map_err(|e| ArchError::ParsingError(e.into()))?;
-        trace!("PC{} -> Running {:?}", state.last_pc, instr.1);
+        debug!("PC{} -> Running {:?}", state.last_pc, instr.1);
         let timing = Self::cycle_count_m4_core(&instr.1);
         let ops: Vec<Operation> = instr.clone().convert(state.get_in_conditional_block());
 

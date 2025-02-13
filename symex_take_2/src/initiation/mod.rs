@@ -4,10 +4,10 @@ use std::{fmt::Display, path::PathBuf};
 use gimli::{DebugAbbrev, DebugInfo, DebugStr};
 use hashbrown::HashMap;
 use object::{Object, ObjectSection, ObjectSymbol};
-use tracing::debug;
 
 use crate::{
     arch::SupportedArchitecture,
+    debug,
     defaults::boolector::UserState,
     executor::hooks::{HookContainer, PCHook},
     logging::NoLogger,
@@ -19,10 +19,7 @@ use crate::{
     UserStateContainer,
 };
 
-//pub mod run_config;
-
 mod sealed {
-
     pub trait ArchOverride {}
     pub trait SmtSolverConfigured {}
     pub trait BinaryLoadingDone {}
@@ -30,26 +27,33 @@ mod sealed {
 use sealed::*;
 
 #[doc(hidden)]
+/// SMT solver has been configured.
 pub struct SmtConfigured<Smt: SmtSolver> {
     smt: Smt,
 }
 
 #[doc(hidden)]
+/// SMT solver has not been configured.
 pub struct SmtNotConfigured;
 
 #[doc(hidden)]
+/// Binary file loaded.
 pub struct BinaryLoaded<'file> {
     object: object::File<'file>,
 }
 
 #[doc(hidden)]
+/// Binary not loaded.
 pub struct BinaryNotLoaded;
 
 #[doc(hidden)]
 #[derive(Debug, Clone)]
+/// No architecture specified.
 pub struct NoArchOverride;
 
-#[doc(hidden)]
+/// Constructs the symex virtual machine to run with the desired settings.
+///
+/// See [`defaults`](crate::defaults) for default configurations.
 pub struct SymexConstructor<
     'str,
     Override: ArchOverride,
@@ -63,6 +67,7 @@ pub struct SymexConstructor<
 }
 
 impl<'str> SymexConstructor<'str, NoArchOverride, SmtNotConfigured, BinaryNotLoaded> {
+    /// Begins the [`SymexArbiter`] initiation.
     pub const fn new(path: &'str str) -> Self {
         Self {
             file: path,
@@ -111,6 +116,7 @@ impl<'str, 'file, A: ArchOverride, S: SmtSolverConfigured>
             Ok(x) => x,
             Err(e) => {
                 debug!("Error: {}", e);
+                let _ = e;
                 let mut ret = PathBuf::new();
                 ret.push(self.file);
 

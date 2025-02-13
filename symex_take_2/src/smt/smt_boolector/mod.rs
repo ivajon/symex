@@ -251,7 +251,7 @@ impl Boolector {
         result
     }
 
-    /// Returns `true` if `lhs` and `rhs` must be equal under the current
+    /// Returns `true` if `lhs` and `rhs` must be equal under the currene?
     /// constraints.
     pub fn _must_be_equal(
         &self,
@@ -303,6 +303,7 @@ impl Boolector {
 
         let result = || {
             while solutions.len() < upper_bound && self.is_sat()? {
+                // NOTE: Disambiguate call here is probably dangerous.
                 let solution = expr.0.get_a_solution().disambiguate();
                 let solution = solution.as_01x_str();
                 let solution = BoolectorExpr(BV::from_binary_str(self.ctx.clone(), solution));

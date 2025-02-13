@@ -3,12 +3,12 @@
 use std::fmt::Display;
 
 use armv6_m_instruction_parser::Error;
-use tracing::trace;
 
 use crate::{
     arch::{ArchError, Architecture, ParseError, SupportedArchitecture},
     executor::{hooks::PCHook, state::GAState},
     smt::{SmtExpr, SmtMap},
+    trace,
 };
 
 pub mod decoder;

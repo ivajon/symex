@@ -5,6 +5,7 @@ use general_assembly::{prelude::DataWord, shift::Shift};
 
 use crate::{memory::MemoryError as MemoryFileError, Endianness, GAError};
 
+pub mod bitwuzla;
 pub mod smt_boolector;
 
 pub type DExpr = smt_boolector::BoolectorExpr;

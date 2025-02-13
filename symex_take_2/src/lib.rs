@@ -107,3 +107,52 @@ pub enum Endianness {
     Little,
     Big,
 }
+
+pub(crate) mod sealed {
+    #[macro_export]
+    macro_rules! error{
+        ($($tt:tt)*) => {
+            #[cfg(feature = "log")]
+            tracing::error!($($tt)*);
+        };
+    }
+    #[macro_export]
+    macro_rules! warn{
+        ($($tt:tt)*) => {
+            #[cfg(feature = "log")]
+            tracing::warn!($($tt)*);
+        };
+    }
+    #[macro_export]
+    macro_rules! debug{
+        ($($tt:tt)*) => {
+            #[cfg(feature = "log")]
+            tracing::debug!($($tt)*);
+        };
+    }
+    #[macro_export]
+    macro_rules! trace {
+        ($($tt:tt)*) => {
+            #[cfg(feature = "log")]
+            tracing::trace!($($tt)*);
+        };
+    }
+
+    #[macro_export]
+    macro_rules! repeat {
+        (for {$($id:ty),*}$($tokens:tt)*) => {
+            $(
+            paste::paste!{
+
+                mod [<$id:snake _tests>] {
+                    use super::*;
+                    type TestType = $id;
+                    $($tokens)*
+                }
+            };
+            )*
+        };
+    }
+}
+#[allow(unused_imports)]
+pub(crate) use sealed::*;

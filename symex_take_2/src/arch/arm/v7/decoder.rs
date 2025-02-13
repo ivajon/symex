@@ -6,7 +6,7 @@ use general_assembly::{
     shift::Shift as GAShift,
 };
 use paste::paste;
-use tracing::warn;
+use crate::warn;
 use transpiler::pseudo;
 
 use disarmv7::prelude::{
@@ -658,11 +658,11 @@ impl Convert for (usize, V7Operation) {
                 // TODO! Decide whether or not to use this 
                 V7Operation::Dbg(_) => vec![],
                 V7Operation::Dmb(_) => {
-                    tracing::warn!("DMB: This requires an exhaustive rewrite of the system to allow memory barriers");
+                    crate::warn!("DMB: This requires an exhaustive rewrite of the system to allow memory barriers");
                     vec![]
                 }
                 V7Operation::Dsb(_) => {
-                    tracing::warn!("DSB: This requires an exhaustive rewrite of the system to allow memory barriers");
+                    crate::warn!("DSB: This requires an exhaustive rewrite of the system to allow memory barriers");
                     vec![]
                 }
                 V7Operation::EorImmediate(eor) => {
@@ -719,7 +719,7 @@ impl Convert for (usize, V7Operation) {
                 // NOTE: This is used in unanalyzable code. If the barrier fails we cannot loop
                 // for ever.
                 V7Operation::Isb(_) => {
-                    tracing::warn!("Encountered ISB instruction. This cannot be analyzed, using a noop instead.");
+                    crate::warn!("Encountered ISB instruction. This cannot be analyzed, using a noop instead.");
                     vec![]
                 }, //todo!("This needs to be revisited when the executor can handle it"),
                 V7Operation::It(it) => {

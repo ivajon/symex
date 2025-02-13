@@ -68,7 +68,6 @@ impl<'a> PathLogger<'a> {
     }
 
     fn visit(&mut self, func: String) {
-        println!("Executing in {func}");
         if Some(&func) != self.path.visited.last() {
             self.path.visited.push(func);
         }
